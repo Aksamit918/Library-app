@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">HomeLibrary</string>
+    <string name="add_book">Добавить книгу</string>
+    <string name="book_title">Название книги</string>
+    <string name="author_name">Имя автора</string>
+    <string name="isbn">ISBN</string>
+    <string name="page_count">Количество страниц</string>
+    <string name="save_book">Сохранить книгу</string>
+    <string name="my_library">Моя библиотека</string>
+    <string name="search_title_author_or_isbn">Поиск по названию, автору или ISBN</string>
+    <string name="add_book_btn">Добавить книгу</string>
+    <string name="align_barcode_inside_target_frame">Выровняйте штрихкод внутри рамки</string>
+</resources>

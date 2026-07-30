@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">HomeLibrary</string>
+    <string name="add_book">Añadir libro</string>
+    <string name="book_title">Título del libro</string>
+    <string name="author_name">Nombre del autor</string>
+    <string name="isbn">ISBN</string>
+    <string name="page_count">Número de páginas</string>
+    <string name="save_book">Guardar libro</string>
+    <string name="my_library">Mi biblioteca</string>
+    <string name="search_title_author_or_isbn">Buscar por título, autor o ISBN</string>
+    <string name="add_book_btn">Añadir libro</string>
+    <string name="align_barcode_inside_target_frame">Alinea el código de barras dentro del marco</string>
+</resources>

@@ -61,8 +61,6 @@
     <string name="isbn_already_exists">Гэты ISBN ужо ёсць у вашай бібліятэцы!</string>
     <string name="update_book">Абнавіць кнігу</string>
     <string name="edit_book">Рэдагаваць кнігу</string>
-    <string name="lookup_isbn">Знайсці па ISBN</string>
-    <string name="lookup_isbn_required">Увядзіце ISBN для пошуку</string>
     <string name="lookup_success">Даныя кнігі запоўнены з Open Library</string>
     <string name="lookup_not_found">Кніга з такім ISBN не знойдзена</string>
     <string name="lookup_network_error">Памылка пошуку. Праверце падключэнне да інтэрнэту</string>

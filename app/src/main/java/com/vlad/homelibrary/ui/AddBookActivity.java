@@ -73,7 +73,6 @@ public class AddBookActivity extends AppCompatActivity {
     private EditText editPersonalNotes;
     private CheckBox checkSigned;
     private Button btnSave;
-    private Button btnLookupIsbn;
     private ProgressBar progressIsbnLookup;
     private TextInputLayout layoutIsbn;
     private LinearLayout containerDetailedFields;
@@ -190,7 +189,6 @@ public class AddBookActivity extends AppCompatActivity {
             pendingOcrTarget = null;
             openScanner(false);
         });
-        btnLookupIsbn.setOnClickListener(v -> lookupIsbnMetadata());
         enableOcrForAllTextFields();
 
         android.content.Intent intent = getIntent();
@@ -247,7 +245,6 @@ public class AddBookActivity extends AppCompatActivity {
         editPersonalNotes = findViewById(R.id.edit_personal_notes);
         checkSigned = findViewById(R.id.check_signed);
         btnSave = findViewById(R.id.btn_save);
-        btnLookupIsbn = findViewById(R.id.btn_lookup_isbn);
         progressIsbnLookup = findViewById(R.id.progress_isbn_lookup);
         layoutIsbn = findViewById(R.id.layout_isbn);
         imageAddCover = findViewById(R.id.image_add_cover);
@@ -322,7 +319,6 @@ public class AddBookActivity extends AppCompatActivity {
 
         String isbn = OpenLibraryClient.normalizeIsbn(editIsbn.getText().toString());
         if (isbn.isEmpty()) {
-            Toast.makeText(this, R.string.lookup_isbn_required, Toast.LENGTH_SHORT).show();
             return;
         }
 
@@ -357,7 +353,6 @@ public class AddBookActivity extends AppCompatActivity {
     private void setLookupLoading(boolean loading) {
         lookupInProgress = loading;
         progressIsbnLookup.setVisibility(loading ? View.VISIBLE : View.GONE);
-        btnLookupIsbn.setEnabled(!loading);
         layoutIsbn.setEnabled(!loading);
     }
 

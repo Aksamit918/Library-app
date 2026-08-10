@@ -61,8 +61,6 @@
     <string name="isbn_already_exists">¡Este ISBN ya existe en tu biblioteca!</string>
     <string name="update_book">Actualizar libro</string>
     <string name="edit_book">Editar libro</string>
-    <string name="lookup_isbn">Buscar ISBN</string>
-    <string name="lookup_isbn_required">Introduce un ISBN para buscar</string>
     <string name="lookup_success">Datos del libro rellenados desde Open Library</string>
     <string name="lookup_not_found">No se encontró ningún libro con este ISBN</string>
     <string name="lookup_network_error">Error de búsqueda. Comprueba tu conexión a internet</string>

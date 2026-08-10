@@ -66,6 +66,12 @@
     <string name="lookup_network_error">Ошибка поиска. Проверьте подключение к интернету</string>
     <string name="capture_text">Распознать текст</string>
     <string name="align_text_inside_target_frame">Поместите текст в рамку и нажмите «Распознать»</string>
+    <string name="take_photo">Сделать фото</string>
+    <string name="retake_photo">Переснять</string>
+    <string name="take_photo_of_text">Сделайте фото текста</string>
+    <string name="draw_around_text_to_scan">Обведите текст пальцем</string>
+    <string name="ocr_selection_too_small">Область слишком маленькая — попробуйте ещё раз</string>
+    <string name="captured_photo">Сделанное фото</string>
     <string name="camera_permission_required">Для сканирования нужно разрешение камеры</string>
     <string name="camera_start_failed">Не удалось запустить камеру</string>
     <string name="ocr_capture_failed">Не удалось сделать снимок</string>

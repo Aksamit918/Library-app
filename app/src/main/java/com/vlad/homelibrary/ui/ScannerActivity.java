@@ -4,21 +4,31 @@ import android.Manifest;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Matrix;
+import android.graphics.Path;
+import android.graphics.RectF;
 import android.os.Bundle;
 import android.util.TypedValue;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.activity.OnBackPressedCallback;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.camera.core.CameraSelector;
 import androidx.camera.core.ImageAnalysis;
+import androidx.camera.core.ImageCapture;
+import androidx.camera.core.ImageCaptureException;
+import androidx.camera.core.ImageProxy;
 import androidx.camera.core.Preview;
 import androidx.camera.lifecycle.ProcessCameraProvider;
 import androidx.camera.view.PreviewView;
@@ -34,11 +44,13 @@ import com.google.mlkit.vision.barcode.common.Barcode;
 import com.google.mlkit.vision.common.InputImage;
 import com.vlad.homelibrary.R;
 import com.vlad.homelibrary.data.LibraryDatabase;
+import com.vlad.homelibrary.scan.FreehandSelectionView;
 import com.vlad.homelibrary.scan.MultilingualOcrEngine;
 import com.vlad.homelibrary.scan.ScanResultParser;
 import com.vlad.homelibrary.scan.ScanZoneHelper;
 import com.vlad.homelibrary.scan.TessdataManager;
 
+import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -47,17 +59,26 @@ public class ScannerActivity extends AppCompatActivity {
     public static final String EXTRA_START_OCR_MODE = "extra_start_ocr_mode";
 
     private PreviewView previewView;
+    private ImageView imageCapturedPhoto;
     private MaterialCardView scannerFrame;
+    private FreehandSelectionView freehandSelection;
     private TextView textScanHint;
-    private MaterialButton btnCaptureOcr;
+    private MaterialButton btnTakePhoto;
+    private MaterialButton btnRetakePhoto;
     private ProgressBar progressScan;
 
     private ProcessCameraProvider cameraProvider;
+    private ImageCapture imageCapture;
     private BarcodeScanner barcodeScanner;
     private final MultilingualOcrEngine ocrEngine = new MultilingualOcrEngine();
     private final AtomicBoolean barcodeHandled = new AtomicBoolean(false);
+
     private boolean ocrMode = false;
+    private boolean selectingOnPhoto = false;
     private boolean ocrBusy = false;
+    private boolean capturingPhoto = false;
+    @Nullable
+    private Bitmap capturedPhoto;
 
     private final ActivityResultLauncher<String> cameraPermissionLauncher = registerForActivityResult(
             new ActivityResultContracts.RequestPermission(),
@@ -77,9 +98,12 @@ public class ScannerActivity extends AppCompatActivity {
         setContentView(R.layout.activity_scanner);
 
         previewView = findViewById(R.id.preview_view);
+        imageCapturedPhoto = findViewById(R.id.image_captured_photo);
         scannerFrame = findViewById(R.id.card_scanner_frame);
+        freehandSelection = findViewById(R.id.freehand_selection);
         textScanHint = findViewById(R.id.text_scan_hint);
-        btnCaptureOcr = findViewById(R.id.btn_capture_ocr);
+        btnTakePhoto = findViewById(R.id.btn_take_photo);
+        btnRetakePhoto = findViewById(R.id.btn_retake_photo);
         progressScan = findViewById(R.id.progress_scan);
 
         BarcodeScannerOptions options = new BarcodeScannerOptions.Builder()
@@ -87,9 +111,33 @@ public class ScannerActivity extends AppCompatActivity {
                 .build();
         barcodeScanner = BarcodeScanning.getClient(options);
 
-        btnCaptureOcr.setOnClickListener(v -> captureAndRecognizeText());
+        btnTakePhoto.setOnClickListener(v -> takeOcrPhoto());
+        btnRetakePhoto.setOnClickListener(v -> returnToPhotoCapture());
 
-        // ISBN opens barcode mode; title and other text fields open OCR mode.
+        freehandSelection.setSelectionListener(new FreehandSelectionView.SelectionListener() {
+            @Override
+            public void onSelectionComplete(Path path, RectF boundsInView) {
+                recognizeSelectedText(path, boundsInView);
+            }
+
+            @Override
+            public void onSelectionTooSmall() {
+                Toast.makeText(ScannerActivity.this, R.string.ocr_selection_too_small, Toast.LENGTH_SHORT).show();
+            }
+        });
+
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                if (ocrMode && selectingOnPhoto && !ocrBusy) {
+                    returnToPhotoCapture();
+                } else {
+                    setEnabled(false);
+                    getOnBackPressedDispatcher().onBackPressed();
+                }
+            }
+        });
+
         setOcrMode(getIntent().getBooleanExtra(EXTRA_START_OCR_MODE, false));
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
@@ -103,23 +151,30 @@ public class ScannerActivity extends AppCompatActivity {
     private void setOcrMode(boolean enabled) {
         ocrMode = enabled;
         barcodeHandled.set(false);
-        btnCaptureOcr.setVisibility(enabled ? View.VISIBLE : View.GONE);
-        textScanHint.setText(enabled
-                ? R.string.align_text_inside_target_frame
-                : R.string.align_barcode_inside_target_frame);
-        updateScanFrameSize(enabled);
-    }
+        selectingOnPhoto = false;
 
-    private void updateScanFrameSize(boolean ocrEnabled) {
-        ViewGroup.LayoutParams params = scannerFrame.getLayoutParams();
-        if (ocrEnabled) {
-            params.width = dp(300);
-            params.height = dp(220);
+        if (enabled) {
+            scannerFrame.setVisibility(View.GONE);
+            freehandSelection.setVisibility(View.GONE);
+            freehandSelection.setDrawingEnabled(false);
+            imageCapturedPhoto.setVisibility(View.GONE);
+            btnTakePhoto.setVisibility(View.VISIBLE);
+            btnRetakePhoto.setVisibility(View.GONE);
+            textScanHint.setText(R.string.take_photo_of_text);
         } else {
+            freehandSelection.setVisibility(View.GONE);
+            freehandSelection.setDrawingEnabled(false);
+            freehandSelection.clearSelection();
+            imageCapturedPhoto.setVisibility(View.GONE);
+            btnTakePhoto.setVisibility(View.GONE);
+            btnRetakePhoto.setVisibility(View.GONE);
+            scannerFrame.setVisibility(View.VISIBLE);
+            textScanHint.setText(R.string.align_barcode_inside_target_frame);
+            ViewGroup.LayoutParams params = scannerFrame.getLayoutParams();
             params.width = dp(280);
             params.height = dp(140);
+            scannerFrame.setLayoutParams(params);
         }
-        scannerFrame.setLayoutParams(params);
     }
 
     private int dp(int value) {
@@ -137,72 +192,216 @@ public class ScannerActivity extends AppCompatActivity {
         cameraProviderFuture.addListener(() -> {
             try {
                 cameraProvider = cameraProviderFuture.get();
-
-                Preview preview = new Preview.Builder().build();
-                preview.setSurfaceProvider(previewView.getSurfaceProvider());
-
-                ImageAnalysis imageAnalysis = new ImageAnalysis.Builder()
-                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                        .build();
-
-                imageAnalysis.setAnalyzer(ContextCompat.getMainExecutor(this), imageProxy -> {
-                    if (ocrMode || barcodeHandled.get()) {
-                        imageProxy.close();
-                        return;
-                    }
-
-                    @androidx.annotation.OptIn(markerClass = androidx.camera.core.ExperimentalGetImage.class)
-                    android.media.Image mediaImage = imageProxy.getImage();
-                    if (mediaImage == null) {
-                        imageProxy.close();
-                        return;
-                    }
-
-                    InputImage image = InputImage.fromMediaImage(
-                            mediaImage,
-                            imageProxy.getImageInfo().getRotationDegrees()
-                    );
-
-                    barcodeScanner.process(image)
-                            .addOnSuccessListener(barcodes -> {
-                                if (ocrMode || barcodeHandled.get()) {
-                                    return;
-                                }
-                                for (Barcode barcode : barcodes) {
-                                    String rawValue = barcode.getRawValue();
-                                    if (rawValue == null || rawValue.trim().length() < 3) {
-                                        continue;
-                                    }
-                                    if (!ScanZoneHelper.isBarcodeInsideScanZone(
-                                            barcode.getBoundingBox(),
-                                            imageProxy,
-                                            previewView,
-                                            scannerFrame
-                                    )) {
-                                        continue;
-                                    }
-                                    if (barcodeHandled.compareAndSet(false, true)) {
-                                        returnBarcodeResult(rawValue.trim());
-                                    }
-                                    return;
-                                }
-                            })
-                            .addOnFailureListener(Throwable::printStackTrace)
-                            .addOnCompleteListener(task -> imageProxy.close());
-                });
-
-                cameraProvider.unbindAll();
-                cameraProvider.bindToLifecycle(
-                        this,
-                        CameraSelector.DEFAULT_BACK_CAMERA,
-                        preview,
-                        imageAnalysis
-                );
+                bindCameraUseCases();
             } catch (Exception e) {
                 e.printStackTrace();
                 Toast.makeText(this, R.string.camera_start_failed, Toast.LENGTH_SHORT).show();
             }
         }, ContextCompat.getMainExecutor(this));
+    }
+
+    private void bindCameraUseCases() {
+        if (cameraProvider == null || selectingOnPhoto) {
+            return;
+        }
+
+        Preview preview = new Preview.Builder().build();
+        preview.setSurfaceProvider(previewView.getSurfaceProvider());
+
+        cameraProvider.unbindAll();
+
+        if (ocrMode) {
+            imageCapture = new ImageCapture.Builder()
+                    .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+                    .build();
+            cameraProvider.bindToLifecycle(
+                    this,
+                    CameraSelector.DEFAULT_BACK_CAMERA,
+                    preview,
+                    imageCapture
+            );
+            return;
+        }
+
+        imageCapture = null;
+        ImageAnalysis imageAnalysis = new ImageAnalysis.Builder()
+                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                .build();
+
+        imageAnalysis.setAnalyzer(ContextCompat.getMainExecutor(this), imageProxy -> {
+            if (ocrMode || barcodeHandled.get()) {
+                imageProxy.close();
+                return;
+            }
+
+            @androidx.annotation.OptIn(markerClass = androidx.camera.core.ExperimentalGetImage.class)
+            android.media.Image mediaImage = imageProxy.getImage();
+            if (mediaImage == null) {
+                imageProxy.close();
+                return;
+            }
+
+            InputImage image = InputImage.fromMediaImage(
+                    mediaImage,
+                    imageProxy.getImageInfo().getRotationDegrees()
+            );
+
+            barcodeScanner.process(image)
+                    .addOnSuccessListener(barcodes -> {
+                        if (ocrMode || barcodeHandled.get()) {
+                            return;
+                        }
+                        for (Barcode barcode : barcodes) {
+                            String rawValue = barcode.getRawValue();
+                            if (rawValue == null || rawValue.trim().length() < 3) {
+                                continue;
+                            }
+                            if (!ScanZoneHelper.isBarcodeInsideScanZone(
+                                    barcode.getBoundingBox(),
+                                    imageProxy,
+                                    previewView,
+                                    scannerFrame
+                            )) {
+                                continue;
+                            }
+                            if (barcodeHandled.compareAndSet(false, true)) {
+                                returnBarcodeResult(rawValue.trim());
+                            }
+                            return;
+                        }
+                    })
+                    .addOnFailureListener(Throwable::printStackTrace)
+                    .addOnCompleteListener(task -> imageProxy.close());
+        });
+
+        cameraProvider.bindToLifecycle(
+                this,
+                CameraSelector.DEFAULT_BACK_CAMERA,
+                preview,
+                imageAnalysis
+        );
+    }
+
+    private void takeOcrPhoto() {
+        if (!ocrMode || capturingPhoto || ocrBusy || imageCapture == null) {
+            return;
+        }
+
+        capturingPhoto = true;
+        btnTakePhoto.setEnabled(false);
+        progressScan.setVisibility(View.VISIBLE);
+
+        imageCapture.takePicture(
+                ContextCompat.getMainExecutor(this),
+                new ImageCapture.OnImageCapturedCallback() {
+                    @Override
+                    public void onCaptureSuccess(@NonNull ImageProxy image) {
+                        Bitmap bitmap = imageProxyToBitmap(image);
+                        image.close();
+                        capturingPhoto = false;
+                        progressScan.setVisibility(View.GONE);
+                        btnTakePhoto.setEnabled(true);
+
+                        if (bitmap == null) {
+                            Toast.makeText(ScannerActivity.this, R.string.ocr_capture_failed, Toast.LENGTH_SHORT).show();
+                            return;
+                        }
+                        enterPhotoSelection(bitmap);
+                    }
+
+                    @Override
+                    public void onError(@NonNull ImageCaptureException exception) {
+                        exception.printStackTrace();
+                        capturingPhoto = false;
+                        progressScan.setVisibility(View.GONE);
+                        btnTakePhoto.setEnabled(true);
+                        Toast.makeText(ScannerActivity.this, R.string.ocr_capture_failed, Toast.LENGTH_SHORT).show();
+                    }
+                }
+        );
+    }
+
+    @Nullable
+    private static Bitmap imageProxyToBitmap(@NonNull ImageProxy image) {
+        try {
+            ByteBuffer buffer = image.getPlanes()[0].getBuffer();
+            byte[] bytes = new byte[buffer.remaining()];
+            buffer.get(bytes);
+            Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+            if (bitmap == null) {
+                return null;
+            }
+
+            int rotation = image.getImageInfo().getRotationDegrees();
+            if (rotation == 0) {
+                return bitmap;
+            }
+
+            Matrix matrix = new Matrix();
+            matrix.postRotate(rotation);
+            Bitmap rotated = Bitmap.createBitmap(bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix, true);
+            if (rotated != bitmap && !bitmap.isRecycled()) {
+                bitmap.recycle();
+            }
+            return rotated;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    private void enterPhotoSelection(@NonNull Bitmap photo) {
+        clearCapturedPhoto();
+        capturedPhoto = photo;
+        selectingOnPhoto = true;
+
+        if (cameraProvider != null) {
+            cameraProvider.unbindAll();
+        }
+
+        previewView.setVisibility(View.GONE);
+        btnTakePhoto.setVisibility(View.GONE);
+        btnRetakePhoto.setVisibility(View.VISIBLE);
+
+        imageCapturedPhoto.setImageBitmap(photo);
+        imageCapturedPhoto.setVisibility(View.VISIBLE);
+
+        freehandSelection.clearSelection();
+        freehandSelection.setVisibility(View.VISIBLE);
+        freehandSelection.setDrawingEnabled(true);
+
+        textScanHint.setText(R.string.draw_around_text_to_scan);
+    }
+
+    private void returnToPhotoCapture() {
+        if (ocrBusy) {
+            return;
+        }
+
+        selectingOnPhoto = false;
+        clearCapturedPhoto();
+
+        freehandSelection.clearSelection();
+        freehandSelection.setDrawingEnabled(false);
+        freehandSelection.setVisibility(View.GONE);
+
+        imageCapturedPhoto.setVisibility(View.GONE);
+        imageCapturedPhoto.setImageDrawable(null);
+
+        previewView.setVisibility(View.VISIBLE);
+        btnTakePhoto.setVisibility(View.VISIBLE);
+        btnRetakePhoto.setVisibility(View.GONE);
+        textScanHint.setText(R.string.take_photo_of_text);
+
+        bindCameraUseCases();
+    }
+
+    private void clearCapturedPhoto() {
+        imageCapturedPhoto.setImageDrawable(null);
+        if (capturedPhoto != null && !capturedPhoto.isRecycled()) {
+            capturedPhoto.recycle();
+        }
+        capturedPhoto = null;
     }
 
     private void returnBarcodeResult(@NonNull String rawValue) {
@@ -224,28 +423,28 @@ public class ScannerActivity extends AppCompatActivity {
         finish();
     }
 
-    private void captureAndRecognizeText() {
-        if (ocrBusy) {
-            return;
-        }
-        Bitmap fullBitmap = previewView.getBitmap();
-        if (fullBitmap == null) {
-            Toast.makeText(this, R.string.ocr_capture_failed, Toast.LENGTH_SHORT).show();
+    private void recognizeSelectedText(@NonNull Path path, @NonNull RectF boundsInView) {
+        if (ocrBusy || capturedPhoto == null || capturedPhoto.isRecycled()) {
+            freehandSelection.clearSelection();
             return;
         }
 
-        Bitmap cropped = ScanZoneHelper.cropToScanZone(fullBitmap, previewView, scannerFrame);
-        if (cropped != fullBitmap) {
-            fullBitmap.recycle();
-        }
+        Bitmap cropped = ScanZoneHelper.cropToFreehandPath(
+                capturedPhoto,
+                imageCapturedPhoto,
+                path,
+                boundsInView
+        );
         if (cropped == null) {
+            freehandSelection.clearSelection();
             Toast.makeText(this, R.string.ocr_capture_failed, Toast.LENGTH_SHORT).show();
             return;
         }
 
         ocrBusy = true;
+        freehandSelection.setDrawingEnabled(false);
+        btnRetakePhoto.setEnabled(false);
         progressScan.setVisibility(View.VISIBLE);
-        btnCaptureOcr.setEnabled(false);
         Toast.makeText(this, R.string.ocr_preparing_languages, Toast.LENGTH_SHORT).show();
 
         final Bitmap frame = cropped;
@@ -262,29 +461,28 @@ public class ScannerActivity extends AppCompatActivity {
 
                 MultilingualOcrEngine.OcrResult ocrResult = ocrEngine.recognize(this, frame);
                 runOnUiThread(() -> {
-                    if (!frame.isRecycled()) {
-                        frame.recycle();
-                    }
-                    progressScan.setVisibility(View.GONE);
-                    btnCaptureOcr.setEnabled(true);
-                    ocrBusy = false;
-                    textScanHint.setText(R.string.align_text_inside_target_frame);
+                    recycleQuietly(frame);
+                    finishOcrAttempt();
                     showOcrChooser(ocrResult);
                 });
             } catch (Exception e) {
                 e.printStackTrace();
                 runOnUiThread(() -> {
-                    if (!frame.isRecycled()) {
-                        frame.recycle();
-                    }
-                    progressScan.setVisibility(View.GONE);
-                    btnCaptureOcr.setEnabled(true);
-                    ocrBusy = false;
-                    textScanHint.setText(R.string.align_text_inside_target_frame);
+                    recycleQuietly(frame);
+                    finishOcrAttempt();
                     Toast.makeText(this, R.string.ocr_failed, Toast.LENGTH_LONG).show();
                 });
             }
         });
+    }
+
+    private void finishOcrAttempt() {
+        progressScan.setVisibility(View.GONE);
+        ocrBusy = false;
+        freehandSelection.clearSelection();
+        freehandSelection.setDrawingEnabled(true);
+        btnRetakePhoto.setEnabled(true);
+        textScanHint.setText(R.string.draw_around_text_to_scan);
     }
 
     private void showOcrChooser(MultilingualOcrEngine.OcrResult ocrResult) {
@@ -330,7 +528,6 @@ public class ScannerActivity extends AppCompatActivity {
                 returnTitleText(lines.get(position));
             });
 
-            // Keep dialog usable when many lines are recognized.
             listLines.post(() -> {
                 int maxHeight = (int) (getResources().getDisplayMetrics().density * 220);
                 if (listLines.getHeight() > maxHeight) {
@@ -348,6 +545,7 @@ public class ScannerActivity extends AppCompatActivity {
     }
 
     private void returnTitleText(String titleText) {
+        clearCapturedPhoto();
         Intent returnIntent = new Intent();
         returnIntent.putExtra(ScanResultParser.EXTRA_SCANNED_TYPE, ScanResultParser.ScanType.TITLE_TEXT.name());
         returnIntent.putExtra(ScanResultParser.EXTRA_SCANNED_VALUE, titleText);
@@ -358,8 +556,15 @@ public class ScannerActivity extends AppCompatActivity {
         finish();
     }
 
+    private static void recycleQuietly(@Nullable Bitmap bitmap) {
+        if (bitmap != null && !bitmap.isRecycled()) {
+            bitmap.recycle();
+        }
+    }
+
     @Override
     protected void onDestroy() {
+        clearCapturedPhoto();
         super.onDestroy();
         if (barcodeScanner != null) {
             barcodeScanner.close();

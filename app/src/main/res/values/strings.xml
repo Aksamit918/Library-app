@@ -65,6 +65,12 @@
     <string name="lookup_network_error">Lookup failed. Check your internet connection</string>
     <string name="capture_text">Capture text</string>
     <string name="align_text_inside_target_frame">Align text inside the frame, then tap Capture</string>
+    <string name="take_photo">Take photo</string>
+    <string name="retake_photo">Retake</string>
+    <string name="take_photo_of_text">Take a photo of the text</string>
+    <string name="draw_around_text_to_scan">Draw around the text with your finger</string>
+    <string name="ocr_selection_too_small">Selection too small — try again</string>
+    <string name="captured_photo">Captured photo</string>
     <string name="camera_permission_required">Camera permission is required to scan</string>
     <string name="camera_start_failed">Failed to start camera</string>
     <string name="ocr_capture_failed">Could not capture image</string>

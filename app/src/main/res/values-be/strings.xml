@@ -66,6 +66,12 @@
     <string name="lookup_network_error">Памылка пошуку. Праверце падключэнне да інтэрнэту</string>
     <string name="capture_text">Распазнаць тэкст</string>
     <string name="align_text_inside_target_frame">Змясціце тэкст у рамку і націсніце «Распазнаць»</string>
+    <string name="take_photo">Зрабіць фота</string>
+    <string name="retake_photo">Перазняць</string>
+    <string name="take_photo_of_text">Зрабіце фота тэксту</string>
+    <string name="draw_around_text_to_scan">Абвядзіце тэкст пальцам</string>
+    <string name="ocr_selection_too_small">Вобласць занадта маленькая — паспрабуйце яшчэ раз</string>
+    <string name="captured_photo">Зробленае фота</string>
     <string name="camera_permission_required">Для сканавання патрэбны дазвол камеры</string>
     <string name="camera_start_failed">Не ўдалося запусціць камеру</string>
     <string name="ocr_capture_failed">Не ўдалося зрабіць здымак</string>

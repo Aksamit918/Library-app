@@ -66,6 +66,12 @@
     <string name="lookup_network_error">Error de búsqueda. Comprueba tu conexión a internet</string>
     <string name="capture_text">Capturar texto</string>
     <string name="align_text_inside_target_frame">Alinea el texto dentro del marco y pulsa Capturar</string>
+    <string name="take_photo">Tomar foto</string>
+    <string name="retake_photo">Volver a tomar</string>
+    <string name="take_photo_of_text">Toma una foto del texto</string>
+    <string name="draw_around_text_to_scan">Dibuja alrededor del texto con el dedo</string>
+    <string name="ocr_selection_too_small">Selección demasiado pequeña — inténtalo de nuevo</string>
+    <string name="captured_photo">Foto capturada</string>
     <string name="camera_permission_required">Se necesita permiso de cámara para escanear</string>
     <string name="camera_start_failed">No se pudo iniciar la cámara</string>
     <string name="ocr_capture_failed">No se pudo capturar la imagen</string>

@@ -45,7 +45,7 @@ public class MultilingualOcrEngine {
             if (!tess.init(dataPath, TessdataManager.TESSERACT_LANGS)) {
                 throw new IllegalStateException("Failed to init Tesseract");
             }
-            // The scan frame is one block of text (e.g. a multi-line title).
+            // Titles are usually one text block; single-block mode preserves multi-line layout.
             tess.setPageSegMode(TessBaseAPI.PageSegMode.PSM_SINGLE_BLOCK);
             tess.setImage(bitmap);
             String rawText = tess.getUTF8Text();
@@ -102,10 +102,8 @@ public class MultilingualOcrEngine {
             return "";
         }
         String cleaned = value.trim();
-        // Drop common OCR junk stuck to edges.
         cleaned = cleaned.replaceAll("^[|_=\\-•·]+", "");
         cleaned = cleaned.replaceAll("[|_=\\-•·]+$", "");
-        // Collapse broken spacing inside a fragment.
         cleaned = cleaned.replaceAll("\\s+", " ").trim();
         return cleaned;
     }

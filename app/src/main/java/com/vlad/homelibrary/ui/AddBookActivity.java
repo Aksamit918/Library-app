@@ -7,6 +7,7 @@ import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
@@ -22,7 +23,11 @@ import com.vlad.homelibrary.data.Author;
 import com.vlad.homelibrary.data.Book;
 import com.vlad.homelibrary.data.LibraryDatabase;
 import com.vlad.homelibrary.data.Publisher;
+import com.vlad.homelibrary.lookup.BookMetadata;
+import com.vlad.homelibrary.lookup.OpenLibraryClient;
 import com.vlad.homelibrary.viewmodel.BookViewModel;
+
+import java.io.File;
 
 public class AddBookActivity extends AppCompatActivity {
 
@@ -66,13 +71,17 @@ public class AddBookActivity extends AppCompatActivity {
     private EditText editPersonalNotes;
     private CheckBox checkSigned;
     private Button btnSave;
+    private Button btnLookupIsbn;
+    private ProgressBar progressIsbnLookup;
     private TextInputLayout layoutIsbn;
     private LinearLayout containerDetailedFields;
     private MaterialButtonToggleGroup toggleAddMode;
     private BookViewModel bookViewModel;
+    private final OpenLibraryClient openLibraryClient = new OpenLibraryClient();
     private long currentBookId = -1;
     private boolean detailedMode = false;
     private boolean editFormPopulated = false;
+    private boolean lookupInProgress = false;
     private Book loadedBook;
     private String loadedPublisherName;
 
@@ -93,6 +102,7 @@ public class AddBookActivity extends AppCompatActivity {
                     String scannedIsbn = result.getData().getStringExtra("scanned_isbn");
                     if (scannedIsbn != null) {
                         editIsbn.setText(scannedIsbn);
+                        lookupIsbnMetadata();
                     }
                 }
             }
@@ -134,6 +144,7 @@ public class AddBookActivity extends AppCompatActivity {
             android.content.Intent intent = new android.content.Intent(this, ScannerActivity.class);
             scannerLauncher.launch(intent);
         });
+        btnLookupIsbn.setOnClickListener(v -> lookupIsbnMetadata());
 
         android.content.Intent intent = getIntent();
         if (intent.hasExtra("EXTRA_ID")) {
@@ -189,10 +200,99 @@ public class AddBookActivity extends AppCompatActivity {
         editPersonalNotes = findViewById(R.id.edit_personal_notes);
         checkSigned = findViewById(R.id.check_signed);
         btnSave = findViewById(R.id.btn_save);
+        btnLookupIsbn = findViewById(R.id.btn_lookup_isbn);
+        progressIsbnLookup = findViewById(R.id.progress_isbn_lookup);
         layoutIsbn = findViewById(R.id.layout_isbn);
         imageAddCover = findViewById(R.id.image_add_cover);
         containerDetailedFields = findViewById(R.id.container_detailed_fields);
         toggleAddMode = findViewById(R.id.toggle_add_mode);
+    }
+
+    private void lookupIsbnMetadata() {
+        if (lookupInProgress) {
+            return;
+        }
+
+        String isbn = OpenLibraryClient.normalizeIsbn(editIsbn.getText().toString());
+        if (isbn.isEmpty()) {
+            Toast.makeText(this, R.string.lookup_isbn_required, Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        setLookupLoading(true);
+
+        LibraryDatabase.databaseWriteExecutor.execute(() -> {
+            OpenLibraryClient.LookupResult result = openLibraryClient.lookupByIsbn(isbn);
+            String coverPath = null;
+            if (result.status == OpenLibraryClient.Status.SUCCESS
+                    && result.metadata != null
+                    && result.metadata.getCoverUrl() != null
+                    && !hasCoverSelected()) {
+                File coversDir = new File(getFilesDir(), "covers");
+                coverPath = openLibraryClient.downloadCoverToFile(result.metadata.getCoverUrl(), coversDir);
+            }
+
+            final String downloadedCoverPath = coverPath;
+            runOnUiThread(() -> {
+                setLookupLoading(false);
+                if (result.status == OpenLibraryClient.Status.SUCCESS && result.metadata != null) {
+                    applyMetadataToForm(result.metadata, downloadedCoverPath);
+                    Toast.makeText(this, R.string.lookup_success, Toast.LENGTH_SHORT).show();
+                } else if (result.status == OpenLibraryClient.Status.NOT_FOUND) {
+                    Toast.makeText(this, R.string.lookup_not_found, Toast.LENGTH_SHORT).show();
+                } else {
+                    Toast.makeText(this, R.string.lookup_network_error, Toast.LENGTH_SHORT).show();
+                }
+            });
+        });
+    }
+
+    private void setLookupLoading(boolean loading) {
+        lookupInProgress = loading;
+        progressIsbnLookup.setVisibility(loading ? View.VISIBLE : View.GONE);
+        btnLookupIsbn.setEnabled(!loading);
+        layoutIsbn.setEnabled(!loading);
+    }
+
+    private boolean hasCoverSelected() {
+        return selectedImagePath != null && !selectedImagePath.trim().isEmpty();
+    }
+
+    private void applyMetadataToForm(BookMetadata metadata, String downloadedCoverPath) {
+        fillIfEmpty(editTitle, metadata.getTitle());
+        fillIfEmpty(editAuthor, metadata.getAuthor());
+        fillIfEmpty(editPublisher, metadata.getPublisher());
+        fillIfEmpty(editGenres, metadata.getGenres());
+
+        if (isEmpty(editPageCount) && metadata.getPageCount() != null && metadata.getPageCount() > 0) {
+            editPageCount.setText(String.valueOf(metadata.getPageCount()));
+        }
+        if (isEmpty(editPublicationYear) && metadata.getPublicationYear() != null) {
+            editPublicationYear.setText(String.valueOf(metadata.getPublicationYear()));
+        }
+
+        if (downloadedCoverPath != null && !downloadedCoverPath.isEmpty() && !hasCoverSelected()) {
+            selectedImagePath = downloadedCoverPath;
+            imageAddCover.setImageURI(android.net.Uri.parse(downloadedCoverPath));
+        }
+
+        if (metadata.hasDetailedFields()) {
+            setDetailedMode(true);
+        }
+
+        if (metadata.getPublisher() != null && !metadata.getPublisher().isBlank()) {
+            loadedPublisherName = textOrNull(editPublisher);
+        }
+    }
+
+    private static boolean isEmpty(EditText editText) {
+        return editText.getText().toString().trim().isEmpty();
+    }
+
+    private static void fillIfEmpty(EditText editText, String value) {
+        if (value != null && !value.isBlank() && isEmpty(editText)) {
+            editText.setText(value);
+        }
     }
 
     private void setDetailedMode(boolean enabled) {
@@ -359,7 +459,22 @@ public class AddBookActivity extends AppCompatActivity {
             publisherName = textOrNull(editPublisher);
         } else if (loadedBook != null) {
             copyDetailedFields(loadedBook, newBook);
-            publisherName = loadedPublisherName;
+            publisherName = textOrNull(editPublisher) != null
+                    ? textOrNull(editPublisher)
+                    : loadedPublisherName;
+            if (!isEmpty(editGenres)) {
+                newBook.setGenres(textOrNull(editGenres));
+            }
+            if (!isEmpty(editPublicationYear)) {
+                try {
+                    newBook.setPublicationYear(Integer.parseInt(editPublicationYear.getText().toString().trim()));
+                } catch (NumberFormatException ignored) {
+                    // keep previously loaded year
+                }
+            }
+        } else {
+            applyDetailedFieldsFromForm(newBook);
+            publisherName = textOrNull(editPublisher);
         }
 
         layoutIsbn.setError(null);

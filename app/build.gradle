@@ -50,4 +50,5 @@ dependencies {
     implementation libs.camerax.view
     implementation libs.mlkit.barcode.scanning
     implementation libs.okhttp
+    implementation libs.tesseract4android
 }

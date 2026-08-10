@@ -25,6 +25,7 @@ import com.vlad.homelibrary.data.LibraryDatabase;
 import com.vlad.homelibrary.data.Publisher;
 import com.vlad.homelibrary.lookup.BookMetadata;
 import com.vlad.homelibrary.lookup.OpenLibraryClient;
+import com.vlad.homelibrary.scan.ScanResultParser;
 import com.vlad.homelibrary.viewmodel.BookViewModel;
 
 import java.io.File;
@@ -98,12 +99,52 @@ public class AddBookActivity extends AppCompatActivity {
     private final ActivityResultLauncher<android.content.Intent> scannerLauncher = registerForActivityResult(
             new ActivityResultContracts.StartActivityForResult(),
             result -> {
-                if (result.getResultCode() == RESULT_OK && result.getData() != null) {
-                    String scannedIsbn = result.getData().getStringExtra("scanned_isbn");
-                    if (scannedIsbn != null) {
-                        editIsbn.setText(scannedIsbn);
-                        lookupIsbnMetadata();
+                if (result.getResultCode() != RESULT_OK || result.getData() == null) {
+                    return;
+                }
+
+                android.content.Intent data = result.getData();
+                String typeName = data.getStringExtra(ScanResultParser.EXTRA_SCANNED_TYPE);
+                String value = data.getStringExtra(ScanResultParser.EXTRA_SCANNED_VALUE);
+                if (value == null || value.isBlank()) {
+                    value = data.getStringExtra(ScanResultParser.EXTRA_SCANNED_ISBN);
+                }
+                if (value == null || value.isBlank()) {
+                    return;
+                }
+
+                ScanResultParser.ScanType type = ScanResultParser.ScanType.ISBN;
+                if (typeName != null) {
+                    try {
+                        type = ScanResultParser.ScanType.valueOf(typeName);
+                    } catch (IllegalArgumentException ignored) {
+                        type = ScanResultParser.parseBarcode(value);
                     }
+                }
+
+                switch (type) {
+                    case ISBN:
+                        editIsbn.setText(value);
+                        lookupIsbnMetadata();
+                        break;
+                    case ASIN:
+                        setDetailedMode(true);
+                        if (editAsin.getText().toString().trim().isEmpty()) {
+                            editAsin.setText(value);
+                        }
+                        Toast.makeText(this, R.string.scan_asin_filled, Toast.LENGTH_SHORT).show();
+                        break;
+                    case TITLE_TEXT:
+                        if (editTitle.getText().toString().trim().isEmpty()) {
+                            editTitle.setText(value);
+                        } else {
+                            Toast.makeText(this, getString(R.string.scan_title_suggestion, value), Toast.LENGTH_LONG).show();
+                        }
+                        break;
+                    case OTHER:
+                    default:
+                        Toast.makeText(this, getString(R.string.scan_other_code, value), Toast.LENGTH_LONG).show();
+                        break;
                 }
             }
     );

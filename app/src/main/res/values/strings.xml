@@ -65,4 +65,19 @@
     <string name="lookup_success">Book details filled from Open Library</string>
     <string name="lookup_not_found">No book found for this ISBN</string>
     <string name="lookup_network_error">Lookup failed. Check your internet connection</string>
+    <string name="scan_mode_barcode">Barcode</string>
+    <string name="scan_mode_ocr">Text OCR</string>
+    <string name="capture_text">Capture text</string>
+    <string name="align_text_inside_target_frame">Point at the title text, then tap Capture</string>
+    <string name="camera_permission_required">Camera permission is required to scan</string>
+    <string name="camera_start_failed">Failed to start camera</string>
+    <string name="ocr_capture_failed">Could not capture image</string>
+    <string name="ocr_preparing_languages">Preparing multilingual OCR…</string>
+    <string name="ocr_downloading_language">Downloading %1$s (%2$d/%3$d)</string>
+    <string name="ocr_failed">OCR failed. Check your internet connection for language downloads</string>
+    <string name="ocr_no_text_found">No text recognized</string>
+    <string name="ocr_choose_title_line">Choose title text</string>
+    <string name="scan_asin_filled">ASIN filled from scan</string>
+    <string name="scan_title_suggestion">Recognized: %1$s</string>
+    <string name="scan_other_code">Scanned code: %1$s</string>
 </resources>

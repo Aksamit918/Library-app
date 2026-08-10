@@ -66,4 +66,19 @@
     <string name="lookup_success">Данные книги заполнены из Open Library</string>
     <string name="lookup_not_found">Книга с таким ISBN не найдена</string>
     <string name="lookup_network_error">Ошибка поиска. Проверьте подключение к интернету</string>
+    <string name="scan_mode_barcode">Штрихкод</string>
+    <string name="scan_mode_ocr">Текст OCR</string>
+    <string name="capture_text">Распознать текст</string>
+    <string name="align_text_inside_target_frame">Наведите на название и нажмите «Распознать»</string>
+    <string name="camera_permission_required">Для сканирования нужно разрешение камеры</string>
+    <string name="camera_start_failed">Не удалось запустить камеру</string>
+    <string name="ocr_capture_failed">Не удалось сделать снимок</string>
+    <string name="ocr_preparing_languages">Подготовка многоязычного OCR…</string>
+    <string name="ocr_downloading_language">Загрузка %1$s (%2$d/%3$d)</string>
+    <string name="ocr_failed">Ошибка OCR. Проверьте интернет для загрузки языков</string>
+    <string name="ocr_no_text_found">Текст не распознан</string>
+    <string name="ocr_choose_title_line">Выберите строку названия</string>
+    <string name="scan_asin_filled">ASIN заполнен со сканера</string>
+    <string name="scan_title_suggestion">Распознано: %1$s</string>
+    <string name="scan_other_code">Отсканированный код: %1$s</string>
 </resources>

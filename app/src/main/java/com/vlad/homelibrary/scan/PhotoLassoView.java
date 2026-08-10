@@ -1,8 +1,10 @@
 package com.vlad.homelibrary.scan;
 
 import android.content.Context;
+import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.PorterDuff;
@@ -15,13 +17,10 @@ import android.view.View;
 
 import androidx.annotation.Nullable;
 
-/**
- * Overlay for drawing a freehand lasso; reports the closed path on finger lift.
- */
-public class FreehandSelectionView extends View {
+public class PhotoLassoView extends View {
 
     public interface SelectionListener {
-        void onSelectionComplete(Path path, RectF boundsInView);
+        void onRegionSelected(@Nullable Bitmap croppedRegion);
 
         void onSelectionTooSmall();
     }
@@ -29,12 +28,19 @@ public class FreehandSelectionView extends View {
     private final Path drawPath = new Path();
     private final Path closedPath = new Path();
     private final RectF pathBounds = new RectF();
+    private final RectF imageDisplayRect = new RectF();
+    private final Matrix imageDrawMatrix = new Matrix();
+    private final Paint imagePaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
     private final Paint strokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint dimPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint clearPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
+    @Nullable
+    private Bitmap photo;
+    @Nullable
     private SelectionListener listener;
-    private boolean drawingEnabled = true;
+
+    private boolean drawingEnabled = false;
     private boolean isDrawing = false;
     private boolean hasClosedSelection = false;
     private float lastX;
@@ -42,17 +48,18 @@ public class FreehandSelectionView extends View {
     private final float touchTolerance;
     private final float minSelectionSizePx;
 
-    public FreehandSelectionView(Context context) {
+    public PhotoLassoView(Context context) {
         this(context, null);
     }
 
-    public FreehandSelectionView(Context context, @Nullable AttributeSet attrs) {
+    public PhotoLassoView(Context context, @Nullable AttributeSet attrs) {
         this(context, attrs, 0);
     }
 
-    public FreehandSelectionView(Context context, @Nullable AttributeSet attrs, int defStyleAttr) {
+    public PhotoLassoView(Context context, @Nullable AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
         setLayerType(LAYER_TYPE_HARDWARE, null);
+        setBackgroundColor(Color.BLACK);
 
         strokePaint.setStyle(Paint.Style.STROKE);
         strokePaint.setStrokeWidth(dp(3));
@@ -74,6 +81,21 @@ public class FreehandSelectionView extends View {
         this.listener = listener;
     }
 
+    public void setPhoto(@Nullable Bitmap bitmap) {
+        photo = bitmap;
+        clearSelection();
+        updateImageTransform();
+        invalidate();
+    }
+
+    public void clearPhoto() {
+        photo = null;
+        clearSelection();
+        imageDisplayRect.setEmpty();
+        imageDrawMatrix.reset();
+        invalidate();
+    }
+
     public void setDrawingEnabled(boolean enabled) {
         drawingEnabled = enabled;
         if (!enabled) {
@@ -90,8 +112,38 @@ public class FreehandSelectionView extends View {
     }
 
     @Override
+    protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+        super.onSizeChanged(w, h, oldw, oldh);
+        updateImageTransform();
+    }
+
+    private void updateImageTransform() {
+        imageDrawMatrix.reset();
+        imageDisplayRect.setEmpty();
+        if (photo == null || photo.isRecycled() || getWidth() == 0 || getHeight() == 0) {
+            return;
+        }
+
+        float viewW = getWidth();
+        float viewH = getHeight();
+        float bitmapW = photo.getWidth();
+        float bitmapH = photo.getHeight();
+        float scale = Math.min(viewW / bitmapW, viewH / bitmapH);
+        float drawnW = bitmapW * scale;
+        float drawnH = bitmapH * scale;
+        float left = (viewW - drawnW) / 2f;
+        float top = (viewH - drawnH) / 2f;
+        imageDisplayRect.set(left, top, left + drawnW, top + drawnH);
+        imageDrawMatrix.setScale(scale, scale);
+        imageDrawMatrix.postTranslate(left, top);
+    }
+
+    @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
+        if (photo != null && !photo.isRecycled() && !imageDisplayRect.isEmpty()) {
+            canvas.drawBitmap(photo, imageDrawMatrix, imagePaint);
+        }
 
         if (hasClosedSelection && !closedPath.isEmpty()) {
             int save = canvas.saveLayer(0, 0, getWidth(), getHeight(), null);
@@ -109,7 +161,7 @@ public class FreehandSelectionView extends View {
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
-        if (!drawingEnabled || !isEnabled()) {
+        if (!drawingEnabled || !isEnabled() || photo == null) {
             return false;
         }
 
@@ -150,7 +202,6 @@ public class FreehandSelectionView extends View {
                 isDrawing = false;
                 drawPath.lineTo(x, y);
                 drawPath.close();
-
                 closedPath.set(drawPath);
                 closedPath.computeBounds(pathBounds, true);
 
@@ -166,15 +217,78 @@ public class FreehandSelectionView extends View {
                 invalidate();
 
                 if (listener != null) {
-                    Path pathCopy = new Path(closedPath);
-                    RectF boundsCopy = new RectF(pathBounds);
-                    listener.onSelectionComplete(pathCopy, boundsCopy);
+                    listener.onRegionSelected(cropClosedSelection());
                 }
                 return true;
 
             default:
                 return false;
         }
+    }
+
+    @Nullable
+    private Bitmap cropClosedSelection() {
+        if (photo == null || photo.isRecycled() || imageDisplayRect.isEmpty() || closedPath.isEmpty()) {
+            return null;
+        }
+
+        Matrix viewToBitmap = new Matrix();
+        if (!imageDrawMatrix.invert(viewToBitmap)) {
+            return null;
+        }
+
+        Path bitmapPath = new Path(closedPath);
+        bitmapPath.transform(viewToBitmap);
+
+        RectF bitmapBounds = new RectF();
+        bitmapPath.computeBounds(bitmapBounds, true);
+        if (bitmapBounds.isEmpty()) {
+            return null;
+        }
+
+        float edgePad = Math.max(4f, Math.min(bitmapBounds.width(), bitmapBounds.height()) * 0.02f);
+        bitmapBounds.inset(-edgePad, -edgePad);
+        if (!bitmapBounds.intersect(0, 0, photo.getWidth(), photo.getHeight())) {
+            return null;
+        }
+        if (bitmapBounds.width() < 8 || bitmapBounds.height() < 8) {
+            return null;
+        }
+
+        int left = Math.max(0, (int) Math.floor(bitmapBounds.left));
+        int top = Math.max(0, (int) Math.floor(bitmapBounds.top));
+        int right = Math.min(photo.getWidth(), (int) Math.ceil(bitmapBounds.right));
+        int bottom = Math.min(photo.getHeight(), (int) Math.ceil(bitmapBounds.bottom));
+        int width = right - left;
+        int height = bottom - top;
+        if (width < 8 || height < 8) {
+            return null;
+        }
+
+        Path maskPath = expandPath(bitmapPath, Math.max(3f, edgePad));
+        maskPath.offset(-left, -top);
+
+        Bitmap masked = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(masked);
+        canvas.drawColor(Color.WHITE);
+        int save = canvas.save();
+        canvas.clipPath(maskPath);
+        canvas.drawBitmap(photo, -left, -top, imagePaint);
+        canvas.restoreToCount(save);
+        return masked;
+    }
+
+    private static Path expandPath(Path source, float expandPx) {
+        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        paint.setStyle(Paint.Style.FILL_AND_STROKE);
+        paint.setStrokeWidth(expandPx * 2f);
+        paint.setStrokeJoin(Paint.Join.ROUND);
+        paint.setStrokeCap(Paint.Cap.ROUND);
+        Path expanded = new Path();
+        if (!paint.getFillPath(source, expanded)) {
+            expanded.set(source);
+        }
+        return expanded;
     }
 
     private float dp(float value) {

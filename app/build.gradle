@@ -51,4 +51,5 @@ dependencies {
     implementation libs.mlkit.barcode.scanning
     implementation libs.okhttp
     implementation libs.tesseract4android
+    implementation libs.onnxruntime.android
 }

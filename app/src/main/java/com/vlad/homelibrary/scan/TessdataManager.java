@@ -15,30 +15,18 @@ import okhttp3.Request;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
 
-/**
- * Downloads Tesseract traineddata for modern scripts:
- * Latin, Cyrillic, Semitic (Arabic/Hebrew), Armenian, Georgian, CJK.
- * Ancient Egyptian hieroglyphs are not supported by Tesseract tessdata.
- */
 public class TessdataManager {
 
-    public static final String[] LANGUAGE_CODES = {
-            "eng", "spa", "fra", "deu",
-            "rus", "bel", "ukr",
-            "ara", "heb",
-            "hye", "kat",
-            "chi_sim", "jpn", "kor",
-            "ell"
-    };
+    public static final String[] CYRILLIC_LANGUAGE_CODES = {"rus", "ukr", "eng"};
 
-    public static final String TESSERACT_LANGS = String.join("+", LANGUAGE_CODES);
-
-    private static final String TESSDATA_BASE_URL =
+    private static final String TESSDATA_BEST_URL =
+            "https://github.com/tesseract-ocr/tessdata_best/raw/main/";
+    private static final String TESSDATA_FAST_URL =
             "https://github.com/tesseract-ocr/tessdata_fast/raw/main/";
 
     private final OkHttpClient client = new OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(120, TimeUnit.SECONDS)
+            .readTimeout(180, TimeUnit.SECONDS)
             .build();
 
     public File getTessParentDir(Context context) {
@@ -49,27 +37,34 @@ public class TessdataManager {
         return new File(getTessParentDir(context), "tessdata");
     }
 
-    public boolean hasAllLanguageData(Context context) {
+    public boolean hasLanguageData(Context context, String[] codes) {
         File dir = getTessdataDir(context);
-        for (String code : LANGUAGE_CODES) {
+        for (String code : codes) {
             File file = new File(dir, code + ".traineddata");
-            if (!file.exists() || file.length() == 0) {
+            long minBytes = isBestModelCode(code) ? 1_500_000L : 1000L;
+            if (!file.exists() || file.length() < minBytes) {
                 return false;
             }
         }
         return true;
     }
 
-    public void ensureLanguageData(Context context, ProgressCallback callback) throws IOException {
+    public void ensureLanguageData(Context context, String[] codes, ProgressCallback callback)
+            throws IOException {
         File dir = getTessdataDir(context);
         if (!dir.exists() && !dir.mkdirs()) {
             throw new IOException("Cannot create tessdata directory");
         }
 
         List<String> missing = new ArrayList<>();
-        for (String code : LANGUAGE_CODES) {
+        for (String code : codes) {
             File file = new File(dir, code + ".traineddata");
-            if (!file.exists() || file.length() == 0) {
+            long minBytes = isBestModelCode(code) ? 1_500_000L : 1000L;
+            if (!file.exists() || file.length() < minBytes) {
+                if (file.exists()) {
+                    //noinspection ResultOfMethodCallIgnored
+                    file.delete();
+                }
                 missing.add(code);
             }
         }
@@ -87,9 +82,10 @@ public class TessdataManager {
     private void downloadLanguage(File tessdataDir, String code) throws IOException {
         File target = new File(tessdataDir, code + ".traineddata");
         File temp = new File(tessdataDir, code + ".traineddata.partial");
+        String base = isBestModelCode(code) ? TESSDATA_BEST_URL : TESSDATA_FAST_URL;
 
         Request request = new Request.Builder()
-                .url(TESSDATA_BASE_URL + code + ".traineddata")
+                .url(base + code + ".traineddata")
                 .header("User-Agent", "HomeLibraryAndroid/1.0")
                 .get()
                 .build();
@@ -125,6 +121,10 @@ public class TessdataManager {
             }
             throw e;
         }
+    }
+
+    private static boolean isBestModelCode(String code) {
+        return "rus".equals(code) || "ukr".equals(code);
     }
 
     public interface ProgressCallback {

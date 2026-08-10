@@ -11,12 +11,10 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <ImageView
-        android:id="@+id/image_captured_photo"
+    <com.vlad.homelibrary.scan.PhotoLassoView
+        android:id="@+id/photo_lasso_view"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:contentDescription="@string/captured_photo"
-        android:scaleType="fitCenter"
         android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
@@ -36,14 +34,21 @@
         app:strokeColor="#6366F1"
         app:strokeWidth="3dp" />
 
-    <com.vlad.homelibrary.scan.FreehandSelectionView
-        android:id="@+id/freehand_selection"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btn_ocr_script"
+        style="@style/Widget.Material3.Button.TonalButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:layout_marginEnd="16dp"
+        android:minWidth="0dp"
+        android:minHeight="40dp"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:text="@string/ocr_script_cyrillic"
+        android:textAllCaps="false"
         android:visibility="gone"
-        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
     <com.vlad.homelibrary.scan.PassThroughTextView
@@ -62,7 +67,7 @@
         android:text="@string/align_barcode_inside_target_frame"
         android:textColor="#FFFFFF"
         android:textSize="15sp"
-        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintEnd_toStartOf="@id/btn_ocr_script"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 

@@ -8,10 +8,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.widget.AppCompatTextView;
 
-/**
- * Text overlay that never claims touches so a sibling (e.g. freehand selection)
- * underneath can still receive them.
- */
 public class PassThroughTextView extends AppCompatTextView {
 
     public PassThroughTextView(@NonNull Context context) {

@@ -4,7 +4,6 @@ public final class ScanResultParser {
 
     public static final String EXTRA_SCANNED_VALUE = "scanned_value";
     public static final String EXTRA_SCANNED_TYPE = "scanned_type";
-    /** Prefer EXTRA_SCANNED_VALUE when type is ISBN. */
     @Deprecated
     public static final String EXTRA_SCANNED_ISBN = "scanned_isbn";
 

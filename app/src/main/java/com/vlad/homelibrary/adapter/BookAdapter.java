@@ -49,8 +49,13 @@ public class BookAdapter extends RecyclerView.Adapter<BookAdapter.BookViewHolder
         BookAndAuthor currentItem = books.get(position);
 
         holder.textTitle.setText(currentItem.book.getTitle());
-        holder.textAuthor.setText(currentItem.author.getName());
-        holder.textIsbn.setText("ISBN: " + currentItem.book.getIsbn());
+        if (currentItem.author != null && currentItem.author.getName() != null) {
+            holder.textAuthor.setText(currentItem.author.getName());
+            holder.textAuthor.setVisibility(View.VISIBLE);
+        } else {
+            holder.textAuthor.setText(R.string.unknown_author);
+            holder.textAuthor.setVisibility(View.VISIBLE);
+        }
 
         if (currentItem.book.getCoverImageUri() != null && !currentItem.book.getCoverImageUri().isEmpty()) {
             com.bumptech.glide.Glide.with(holder.itemView.getContext())
@@ -67,6 +72,14 @@ public class BookAdapter extends RecyclerView.Adapter<BookAdapter.BookViewHolder
             holder.textPageCount.setVisibility(View.VISIBLE);
         } else {
             holder.textPageCount.setVisibility(View.GONE);
+        }
+
+        String isbn = currentItem.book.getIsbn();
+        if (isbn != null && !isbn.isBlank() && !isbn.startsWith("TEMP-")) {
+            holder.textIsbn.setText("ISBN: " + isbn);
+            holder.textIsbn.setVisibility(View.VISIBLE);
+        } else {
+            holder.textIsbn.setVisibility(View.GONE);
         }
 
         holder.itemView.setOnClickListener(v -> {

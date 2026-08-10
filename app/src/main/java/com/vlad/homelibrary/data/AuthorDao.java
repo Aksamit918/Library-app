@@ -22,6 +22,9 @@ public interface AuthorDao {
     @Query("SELECT * FROM authors WHERE id = :authorId")
     LiveData<Author> getAuthorById(long authorId);
 
+    @Query("SELECT * FROM authors WHERE id = :authorId LIMIT 1")
+    Author getAuthorByIdSync(long authorId);
+
     @Query("SELECT * FROM authors WHERE name LIKE '%' || :searchQuery || '%' ORDER BY name ASC")
     LiveData<List<Author>> searchAuthors(String searchQuery);
 

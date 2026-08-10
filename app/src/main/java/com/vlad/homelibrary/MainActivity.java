@@ -16,7 +16,6 @@ import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.textfield.TextInputLayout;
 import com.vlad.homelibrary.adapter.BookAdapter;
 import com.vlad.homelibrary.data.BookAndAuthor;
@@ -48,18 +47,7 @@ public class MainActivity extends AppCompatActivity {
 
         adapter.setOnItemClickListener(bookAndAuthor -> {
             Intent intent = new Intent(MainActivity.this, AddBookActivity.class);
-
             intent.putExtra("EXTRA_ID", bookAndAuthor.book.getId());
-            intent.putExtra("EXTRA_TITLE", bookAndAuthor.book.getTitle());
-            intent.putExtra("EXTRA_AUTHOR", bookAndAuthor.author.getName());
-            intent.putExtra("EXTRA_ISBN", bookAndAuthor.book.getIsbn());
-            intent.putExtra("EXTRA_IMAGE_URI", bookAndAuthor.book.getCoverImageUri());
-
-
-            if (bookAndAuthor.book.getPageCount() != null && bookAndAuthor.book.getPageCount() > 0) {
-                intent.putExtra("EXTRA_PAGES", bookAndAuthor.book.getPageCount());
-            }
-
             startActivity(intent);
         });
 

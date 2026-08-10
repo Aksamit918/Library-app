@@ -1,9 +1,12 @@
 package com.vlad.homelibrary.ui;
 
 import android.os.Bundle;
+import android.view.View;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
@@ -12,9 +15,13 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.lifecycle.ViewModelProvider;
 
 import com.google.android.material.appbar.MaterialToolbar;
+import com.google.android.material.button.MaterialButtonToggleGroup;
 import com.google.android.material.textfield.TextInputLayout;
 import com.vlad.homelibrary.R;
+import com.vlad.homelibrary.data.Author;
 import com.vlad.homelibrary.data.Book;
+import com.vlad.homelibrary.data.LibraryDatabase;
+import com.vlad.homelibrary.data.Publisher;
 import com.vlad.homelibrary.viewmodel.BookViewModel;
 
 public class AddBookActivity extends AppCompatActivity {
@@ -25,10 +32,49 @@ public class AddBookActivity extends AppCompatActivity {
     private EditText editAuthor;
     private EditText editIsbn;
     private EditText editPageCount;
+    private EditText editAsin;
+    private EditText editLccn;
+    private EditText editOclc;
+    private EditText editSubtitle;
+    private EditText editOriginalTitle;
+    private EditText editSecondaryContributors;
+    private EditText editSeriesName;
+    private EditText editSeriesNumber;
+    private EditText editPublisher;
+    private EditText editImprint;
+    private EditText editPublicationYear;
+    private EditText editEdition;
+    private EditText editPrinting;
+    private EditText editLanguage;
+    private EditText editOriginalLanguage;
+    private EditText editFormat;
+    private EditText editDimensions;
+    private EditText editWeight;
+    private EditText editDustJacket;
+    private EditText editGenres;
+    private EditText editTags;
+    private EditText editDewey;
+    private EditText editLcc;
+    private EditText editDescription;
+    private EditText editLocation;
+    private EditText editCondition;
+    private EditText editDateAcquired;
+    private EditText editPurchasePrice;
+    private EditText editAcquiredFrom;
+    private EditText editReadingStatus;
+    private EditText editRating;
+    private EditText editPersonalNotes;
+    private CheckBox checkSigned;
     private Button btnSave;
     private TextInputLayout layoutIsbn;
+    private LinearLayout containerDetailedFields;
+    private MaterialButtonToggleGroup toggleAddMode;
     private BookViewModel bookViewModel;
     private long currentBookId = -1;
+    private boolean detailedMode = false;
+    private boolean editFormPopulated = false;
+    private Book loadedBook;
+    private String loadedPublisherName;
 
     private final ActivityResultLauncher<String> photoPickerLauncher = registerForActivityResult(
             new ActivityResultContracts.GetContent(),
@@ -67,22 +113,23 @@ public class AddBookActivity extends AppCompatActivity {
             }
         }
 
-        editTitle = findViewById(R.id.edit_title);
-        editAuthor = findViewById(R.id.edit_author);
-        editIsbn = findViewById(R.id.edit_isbn);
-        editPageCount = findViewById(R.id.edit_page_count);
-        btnSave = findViewById(R.id.btn_save);
-        layoutIsbn = findViewById(R.id.layout_isbn);
-        imageAddCover = findViewById(R.id.image_add_cover);
+        bindViews();
         bookViewModel = new ViewModelProvider(this).get(BookViewModel.class);
 
         ViewAnimator.applyPressAnimation(btnSave);
         ViewAnimator.applyPressAnimation(imageAddCover);
 
+        setDetailedMode(false);
+
+        toggleAddMode.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
+            if (!isChecked) {
+                return;
+            }
+            setDetailedMode(checkedId == R.id.btn_mode_detailed);
+        });
+
         btnSave.setOnClickListener(v -> saveBook());
-
         imageAddCover.setOnClickListener(v -> photoPickerLauncher.launch("image/*"));
-
         layoutIsbn.setEndIconOnClickListener(v -> {
             android.content.Intent intent = new android.content.Intent(this, ScannerActivity.class);
             scannerLauncher.launch(intent);
@@ -91,62 +138,233 @@ public class AddBookActivity extends AppCompatActivity {
         android.content.Intent intent = getIntent();
         if (intent.hasExtra("EXTRA_ID")) {
             currentBookId = intent.getLongExtra("EXTRA_ID", -1);
+            btnSave.setText(R.string.update_book);
+            toolbar.setTitle(R.string.edit_book);
 
-            editTitle.setText(intent.getStringExtra("EXTRA_TITLE"));
-            editAuthor.setText(intent.getStringExtra("EXTRA_AUTHOR"));
-            editIsbn.setText(intent.getStringExtra("EXTRA_ISBN"));
-
-            if (intent.hasExtra("EXTRA_PAGES")) {
-                editPageCount.setText(String.valueOf(intent.getIntExtra("EXTRA_PAGES", 0)));
-            }
-
-            selectedImagePath = intent.getStringExtra("EXTRA_IMAGE_URI");
-            if (selectedImagePath != null && !selectedImagePath.isEmpty()) {
-                imageAddCover.setImageURI(android.net.Uri.parse(selectedImagePath));
-            }
-
-            btnSave.setText("Update Book");
-            toolbar.setTitle("Edit Book");
+            bookViewModel.getBookById(currentBookId).observe(this, book -> {
+                if (book != null && !editFormPopulated) {
+                    populateForm(book);
+                    editFormPopulated = true;
+                }
+            });
         }
     }
 
-    private void saveBook() {
-        String title = editTitle.getText().toString().trim();
-        String authorName = editAuthor.getText().toString().trim();
+    private void bindViews() {
+        editTitle = findViewById(R.id.edit_title);
+        editAuthor = findViewById(R.id.edit_author);
+        editIsbn = findViewById(R.id.edit_isbn);
+        editPageCount = findViewById(R.id.edit_page_count);
+        editAsin = findViewById(R.id.edit_asin);
+        editLccn = findViewById(R.id.edit_lccn);
+        editOclc = findViewById(R.id.edit_oclc);
+        editSubtitle = findViewById(R.id.edit_subtitle);
+        editOriginalTitle = findViewById(R.id.edit_original_title);
+        editSecondaryContributors = findViewById(R.id.edit_secondary_contributors);
+        editSeriesName = findViewById(R.id.edit_series_name);
+        editSeriesNumber = findViewById(R.id.edit_series_number);
+        editPublisher = findViewById(R.id.edit_publisher);
+        editImprint = findViewById(R.id.edit_imprint);
+        editPublicationYear = findViewById(R.id.edit_publication_year);
+        editEdition = findViewById(R.id.edit_edition);
+        editPrinting = findViewById(R.id.edit_printing);
+        editLanguage = findViewById(R.id.edit_language);
+        editOriginalLanguage = findViewById(R.id.edit_original_language);
+        editFormat = findViewById(R.id.edit_format);
+        editDimensions = findViewById(R.id.edit_dimensions);
+        editWeight = findViewById(R.id.edit_weight);
+        editDustJacket = findViewById(R.id.edit_dust_jacket);
+        editGenres = findViewById(R.id.edit_genres);
+        editTags = findViewById(R.id.edit_tags);
+        editDewey = findViewById(R.id.edit_dewey);
+        editLcc = findViewById(R.id.edit_lcc);
+        editDescription = findViewById(R.id.edit_description);
+        editLocation = findViewById(R.id.edit_location);
+        editCondition = findViewById(R.id.edit_condition);
+        editDateAcquired = findViewById(R.id.edit_date_acquired);
+        editPurchasePrice = findViewById(R.id.edit_purchase_price);
+        editAcquiredFrom = findViewById(R.id.edit_acquired_from);
+        editReadingStatus = findViewById(R.id.edit_reading_status);
+        editRating = findViewById(R.id.edit_rating);
+        editPersonalNotes = findViewById(R.id.edit_personal_notes);
+        checkSigned = findViewById(R.id.check_signed);
+        btnSave = findViewById(R.id.btn_save);
+        layoutIsbn = findViewById(R.id.layout_isbn);
+        imageAddCover = findViewById(R.id.image_add_cover);
+        containerDetailedFields = findViewById(R.id.container_detailed_fields);
+        toggleAddMode = findViewById(R.id.toggle_add_mode);
+    }
 
-        if (title.isEmpty() || authorName.isEmpty()) {
-            Toast.makeText(this, "Title and Author are required", Toast.LENGTH_SHORT).show();
+    private void setDetailedMode(boolean enabled) {
+        detailedMode = enabled;
+        containerDetailedFields.setVisibility(enabled ? View.VISIBLE : View.GONE);
+        int buttonId = enabled ? R.id.btn_mode_detailed : R.id.btn_mode_quick;
+        if (toggleAddMode.getCheckedButtonId() != buttonId) {
+            toggleAddMode.check(buttonId);
+        }
+    }
+
+    private void populateForm(Book book) {
+        loadedBook = book;
+        editTitle.setText(book.getTitle());
+
+        String existingIsbn = book.getIsbn();
+        if (existingIsbn != null && !existingIsbn.startsWith("TEMP-")) {
+            editIsbn.setText(existingIsbn);
+        }
+
+        if (book.getPageCount() != null && book.getPageCount() > 0) {
+            editPageCount.setText(String.valueOf(book.getPageCount()));
+        }
+
+        selectedImagePath = book.getCoverImageUri();
+        if (selectedImagePath != null && !selectedImagePath.isEmpty()) {
+            imageAddCover.setImageURI(android.net.Uri.parse(selectedImagePath));
+        }
+
+        setText(editAsin, book.getAsin());
+        setText(editLccn, book.getLccn());
+        setText(editOclc, book.getOclc());
+        setText(editSubtitle, book.getSubtitle());
+        setText(editOriginalTitle, book.getOriginalTitle());
+        setText(editSecondaryContributors, book.getSecondaryContributors());
+        setText(editSeriesName, book.getSeriesName());
+        setText(editSeriesNumber, book.getSeriesNumber());
+        setText(editImprint, book.getImprint());
+        if (book.getPublicationYear() != null) {
+            editPublicationYear.setText(String.valueOf(book.getPublicationYear()));
+        }
+        setText(editEdition, book.getEdition());
+        setText(editPrinting, book.getPrinting());
+        setText(editLanguage, book.getLanguage());
+        setText(editOriginalLanguage, book.getOriginalLanguage());
+        setText(editFormat, book.getFormat());
+        setText(editDimensions, book.getDimensions());
+        setText(editWeight, book.getWeight());
+        setText(editDustJacket, book.getDustJacket());
+        setText(editGenres, book.getGenres());
+        setText(editTags, book.getTags());
+        setText(editDewey, book.getDewey());
+        setText(editLcc, book.getLcc());
+        setText(editDescription, book.getDescription());
+        setText(editLocation, book.getLocation());
+        setText(editCondition, book.getCondition());
+        setText(editDateAcquired, book.getDateAcquired());
+        if (book.getPurchasePrice() != null) {
+            editPurchasePrice.setText(String.valueOf(book.getPurchasePrice()));
+        }
+        setText(editAcquiredFrom, book.getAcquiredFrom());
+        setText(editReadingStatus, book.getReadingStatus());
+        if (book.getRating() != null) {
+            editRating.setText(String.valueOf(book.getRating()));
+        }
+        setText(editPersonalNotes, book.getPersonalNotes());
+        checkSigned.setChecked(Boolean.TRUE.equals(book.getSigned()));
+
+        if (book.hasDetailedFields()) {
+            setDetailedMode(true);
+        }
+
+        LibraryDatabase.databaseWriteExecutor.execute(() -> {
+            LibraryDatabase db = LibraryDatabase.getDatabase(getApplicationContext());
+            String authorName = null;
+            String publisherName = null;
+            if (book.getAuthorId() != null) {
+                Author author = db.authorDao().getAuthorByIdSync(book.getAuthorId());
+                if (author != null) {
+                    authorName = author.getName();
+                }
+            }
+            if (book.getPublisherId() != null) {
+                Publisher publisher = db.publisherDao().getPublisherByIdSync(book.getPublisherId());
+                if (publisher != null) {
+                    publisherName = publisher.getName();
+                }
+            }
+            final String finalAuthorName = authorName;
+            final String finalPublisherName = publisherName;
+            runOnUiThread(() -> {
+                loadedPublisherName = finalPublisherName;
+                if (finalAuthorName != null) {
+                    editAuthor.setText(finalAuthorName);
+                }
+                if (finalPublisherName != null) {
+                    editPublisher.setText(finalPublisherName);
+                }
+            });
+        });
+    }
+
+    private void saveBook() {
+        String title = textOrNull(editTitle);
+        if (title == null) {
+            Toast.makeText(this, R.string.title_required, Toast.LENGTH_SHORT).show();
             return;
         }
 
         Book newBook = new Book(title);
-
         if (currentBookId != -1) {
             newBook.setId(currentBookId);
         }
 
-        newBook.setCoverImageUri(selectedImagePath);
-
-        String isbnString = editIsbn.getText().toString().trim();
-        if (isbnString.isEmpty()) {
-            newBook.setIsbn("TEMP-" + System.currentTimeMillis());
-        } else {
-            newBook.setIsbn(isbnString);
-        }
+        String coverPath = selectedImagePath != null ? selectedImagePath.trim() : "";
+        newBook.setCoverImageUri(coverPath.isEmpty() ? null : coverPath);
+        newBook.setIsbn(textOrNull(editIsbn));
 
         String pageCountString = editPageCount.getText().toString().trim();
         if (!pageCountString.isEmpty()) {
             try {
                 newBook.setPageCount(Integer.parseInt(pageCountString));
             } catch (NumberFormatException e) {
-                Toast.makeText(this, "Pages must be a number", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, R.string.pages_must_be_number, Toast.LENGTH_SHORT).show();
                 return;
             }
         }
 
+        String authorName = textOrNull(editAuthor);
+        String publisherName = null;
+
+        if (detailedMode) {
+            String yearString = editPublicationYear.getText().toString().trim();
+            if (!yearString.isEmpty()) {
+                try {
+                    Integer.parseInt(yearString);
+                } catch (NumberFormatException e) {
+                    Toast.makeText(this, R.string.year_must_be_number, Toast.LENGTH_SHORT).show();
+                    return;
+                }
+            }
+
+            String priceString = editPurchasePrice.getText().toString().trim();
+            if (!priceString.isEmpty()) {
+                try {
+                    Double.parseDouble(priceString);
+                } catch (NumberFormatException e) {
+                    Toast.makeText(this, R.string.price_must_be_number, Toast.LENGTH_SHORT).show();
+                    return;
+                }
+            }
+
+            String ratingString = editRating.getText().toString().trim();
+            if (!ratingString.isEmpty()) {
+                try {
+                    Float.parseFloat(ratingString);
+                } catch (NumberFormatException e) {
+                    Toast.makeText(this, R.string.rating_must_be_number, Toast.LENGTH_SHORT).show();
+                    return;
+                }
+            }
+
+            applyDetailedFieldsFromForm(newBook);
+            publisherName = textOrNull(editPublisher);
+        } else if (loadedBook != null) {
+            copyDetailedFields(loadedBook, newBook);
+            publisherName = loadedPublisherName;
+        }
+
         layoutIsbn.setError(null);
 
-        bookViewModel.insertBookWithDetails(newBook, authorName, new BookViewModel.SaveCallback() {
+        bookViewModel.insertBookWithDetails(newBook, authorName, publisherName, new BookViewModel.SaveCallback() {
             @Override
             public void onSuccess() {
                 finish();
@@ -154,9 +372,102 @@ public class AddBookActivity extends AppCompatActivity {
 
             @Override
             public void onIsbnError() {
-                layoutIsbn.setError("This ISBN already exists in your library!");
+                layoutIsbn.setError(getString(R.string.isbn_already_exists));
             }
         });
+    }
+
+    private void applyDetailedFieldsFromForm(Book newBook) {
+        newBook.setAsin(textOrNull(editAsin));
+        newBook.setLccn(textOrNull(editLccn));
+        newBook.setOclc(textOrNull(editOclc));
+        newBook.setSubtitle(textOrNull(editSubtitle));
+        newBook.setOriginalTitle(textOrNull(editOriginalTitle));
+        newBook.setSecondaryContributors(textOrNull(editSecondaryContributors));
+        newBook.setSeriesName(textOrNull(editSeriesName));
+        newBook.setSeriesNumber(textOrNull(editSeriesNumber));
+        newBook.setImprint(textOrNull(editImprint));
+        newBook.setEdition(textOrNull(editEdition));
+        newBook.setPrinting(textOrNull(editPrinting));
+        newBook.setLanguage(textOrNull(editLanguage));
+        newBook.setOriginalLanguage(textOrNull(editOriginalLanguage));
+        newBook.setFormat(textOrNull(editFormat));
+        newBook.setDimensions(textOrNull(editDimensions));
+        newBook.setWeight(textOrNull(editWeight));
+        newBook.setDustJacket(textOrNull(editDustJacket));
+        newBook.setGenres(textOrNull(editGenres));
+        newBook.setTags(textOrNull(editTags));
+        newBook.setDewey(textOrNull(editDewey));
+        newBook.setLcc(textOrNull(editLcc));
+        newBook.setDescription(textOrNull(editDescription));
+        newBook.setLocation(textOrNull(editLocation));
+        newBook.setCondition(textOrNull(editCondition));
+        newBook.setDateAcquired(textOrNull(editDateAcquired));
+        newBook.setAcquiredFrom(textOrNull(editAcquiredFrom));
+        newBook.setReadingStatus(textOrNull(editReadingStatus));
+        newBook.setPersonalNotes(textOrNull(editPersonalNotes));
+        newBook.setSigned(checkSigned.isChecked() ? Boolean.TRUE : null);
+
+        String yearString = editPublicationYear.getText().toString().trim();
+        if (!yearString.isEmpty()) {
+            newBook.setPublicationYear(Integer.parseInt(yearString));
+        }
+
+        String priceString = editPurchasePrice.getText().toString().trim();
+        if (!priceString.isEmpty()) {
+            newBook.setPurchasePrice(Double.parseDouble(priceString));
+        }
+
+        String ratingString = editRating.getText().toString().trim();
+        if (!ratingString.isEmpty()) {
+            newBook.setRating(Float.parseFloat(ratingString));
+        }
+    }
+
+    private void copyDetailedFields(Book source, Book target) {
+        target.setAsin(source.getAsin());
+        target.setLccn(source.getLccn());
+        target.setOclc(source.getOclc());
+        target.setSubtitle(source.getSubtitle());
+        target.setOriginalTitle(source.getOriginalTitle());
+        target.setSecondaryContributors(source.getSecondaryContributors());
+        target.setSeriesName(source.getSeriesName());
+        target.setSeriesNumber(source.getSeriesNumber());
+        target.setImprint(source.getImprint());
+        target.setPublicationYear(source.getPublicationYear());
+        target.setEdition(source.getEdition());
+        target.setPrinting(source.getPrinting());
+        target.setLanguage(source.getLanguage());
+        target.setOriginalLanguage(source.getOriginalLanguage());
+        target.setFormat(source.getFormat());
+        target.setDimensions(source.getDimensions());
+        target.setWeight(source.getWeight());
+        target.setDustJacket(source.getDustJacket());
+        target.setGenres(source.getGenres());
+        target.setTags(source.getTags());
+        target.setDewey(source.getDewey());
+        target.setLcc(source.getLcc());
+        target.setDescription(source.getDescription());
+        target.setLocation(source.getLocation());
+        target.setCondition(source.getCondition());
+        target.setSigned(source.getSigned());
+        target.setDateAcquired(source.getDateAcquired());
+        target.setPurchasePrice(source.getPurchasePrice());
+        target.setAcquiredFrom(source.getAcquiredFrom());
+        target.setReadingStatus(source.getReadingStatus());
+        target.setRating(source.getRating());
+        target.setPersonalNotes(source.getPersonalNotes());
+    }
+
+    private static void setText(EditText editText, String value) {
+        if (value != null) {
+            editText.setText(value);
+        }
+    }
+
+    private static String textOrNull(EditText editText) {
+        String value = editText.getText().toString().trim();
+        return value.isEmpty() ? null : value;
     }
 
     private String copyImageToInternalStorage(android.net.Uri uri) {

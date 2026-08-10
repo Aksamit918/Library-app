@@ -62,7 +62,7 @@ public class BookViewModel extends AndroidViewModel {
         bookRepository.insert(book);
     }
 
-    public void insertBookWithDetails(Book book, String fullAuthorName, SaveCallback callback) {
+    public void insertBookWithDetails(Book book, String fullAuthorName, String publisherName, SaveCallback callback) {
         LibraryDatabase.databaseWriteExecutor.execute(() -> {
 
             LibraryDatabase db = LibraryDatabase.getDatabase(getApplication());
@@ -70,29 +70,38 @@ public class BookViewModel extends AndroidViewModel {
             PublisherDao publisherDao = db.publisherDao();
             BookDao bookDao = db.bookDao();
 
-            int duplicateCount = bookDao.checkIsbnExists(book.getIsbn(), book.getId());
+            int duplicateCount = 0;
+            String isbn = book.getIsbn();
+            if (isbn != null && !isbn.isBlank()) {
+                duplicateCount = bookDao.checkIsbnExists(isbn, book.getId());
+            }
+
             if (duplicateCount > 0) {
                 new android.os.Handler(android.os.Looper.getMainLooper()).post(callback::onIsbnError);
                 return;
             }
 
-            Author existingAuthor = authorDao.getAuthorByNameSync(fullAuthorName);
-            long finalAuthorId;
-            if (existingAuthor != null) {
-                finalAuthorId = existingAuthor.getId();
+            if (fullAuthorName != null && !fullAuthorName.isBlank()) {
+                Author existingAuthor = authorDao.getAuthorByNameSync(fullAuthorName.trim());
+                if (existingAuthor != null) {
+                    book.setAuthorId(existingAuthor.getId());
+                } else {
+                    book.setAuthorId(authorDao.insert(new Author(fullAuthorName.trim())));
+                }
             } else {
-                finalAuthorId = authorDao.insert(new Author(fullAuthorName));
+                book.setAuthorId(null);
             }
-            book.setAuthorId(finalAuthorId);
 
-            Publisher existingPub = publisherDao.getPublisherByNameSync("Unknown");
-            long finalPubId;
-            if (existingPub != null) {
-                finalPubId = existingPub.getId();
+            if (publisherName != null && !publisherName.isBlank()) {
+                Publisher existingPub = publisherDao.getPublisherByNameSync(publisherName.trim());
+                if (existingPub != null) {
+                    book.setPublisherId(existingPub.getId());
+                } else {
+                    book.setPublisherId(publisherDao.insert(new Publisher(publisherName.trim())));
+                }
             } else {
-                finalPubId = publisherDao.insert(new Publisher("Unknown"));
+                book.setPublisherId(null);
             }
-            book.setPublisherId(finalPubId);
 
             if (book.getId() != 0) {
                 bookDao.update(book);

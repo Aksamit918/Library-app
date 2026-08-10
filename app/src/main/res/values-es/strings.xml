@@ -66,10 +66,8 @@
     <string name="lookup_success">Datos del libro rellenados desde Open Library</string>
     <string name="lookup_not_found">No se encontró ningún libro con este ISBN</string>
     <string name="lookup_network_error">Error de búsqueda. Comprueba tu conexión a internet</string>
-    <string name="scan_mode_barcode">Código</string>
-    <string name="scan_mode_ocr">Texto OCR</string>
     <string name="capture_text">Capturar texto</string>
-    <string name="align_text_inside_target_frame">Apunta al título y pulsa Capturar</string>
+    <string name="align_text_inside_target_frame">Alinea el texto dentro del marco y pulsa Capturar</string>
     <string name="camera_permission_required">Se necesita permiso de cámara para escanear</string>
     <string name="camera_start_failed">No se pudo iniciar la cámara</string>
     <string name="ocr_capture_failed">No se pudo capturar la imagen</string>
@@ -79,6 +77,16 @@
     <string name="ocr_no_text_found">No se reconoció texto</string>
     <string name="ocr_choose_title_line">Elige el texto del título</string>
     <string name="scan_asin_filled">ASIN rellenado desde el escáner</string>
+    <string name="scan_field_filled">Campo rellenado desde el escaneo de texto</string>
+    <string name="scan_field_text">Escanear texto en este campo</string>
+    <string name="scan_title_filled">Título rellenado desde el escaneo de texto</string>
+    <string name="scan_title_text">Escanear título</string>
     <string name="scan_title_suggestion">Reconocido: %1$s</string>
     <string name="scan_other_code">Código escaneado: %1$s</string>
+    <string name="ocr_choose_text_line">Elige el texto (bloque completo primero)</string>
+    <string name="ocr_result_title">Texto reconocido</string>
+    <string name="ocr_use_full_text">Usar texto completo</string>
+    <string name="ocr_pick_single_line">Elegir una línea</string>
+    <string name="ocr_full_text_hint">Pulsa el botón para usar el texto completo</string>
+    <string name="ocr_or_pick_line">O pulsa una línea</string>
 </resources>

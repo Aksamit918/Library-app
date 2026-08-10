@@ -2,6 +2,7 @@ package com.vlad.homelibrary.ui;
 
 import android.os.Bundle;
 import android.view.View;
+import android.view.ViewParent;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
@@ -85,6 +86,7 @@ public class AddBookActivity extends AppCompatActivity {
     private boolean lookupInProgress = false;
     private Book loadedBook;
     private String loadedPublisherName;
+    private EditText pendingOcrTarget;
 
     private final ActivityResultLauncher<String> photoPickerLauncher = registerForActivityResult(
             new ActivityResultContracts.GetContent(),
@@ -124,25 +126,28 @@ public class AddBookActivity extends AppCompatActivity {
 
                 switch (type) {
                     case ISBN:
+                        pendingOcrTarget = null;
                         editIsbn.setText(value);
                         lookupIsbnMetadata();
                         break;
                     case ASIN:
+                        pendingOcrTarget = null;
                         setDetailedMode(true);
-                        if (editAsin.getText().toString().trim().isEmpty()) {
-                            editAsin.setText(value);
-                        }
+                        editAsin.setText(value);
                         Toast.makeText(this, R.string.scan_asin_filled, Toast.LENGTH_SHORT).show();
                         break;
                     case TITLE_TEXT:
-                        if (editTitle.getText().toString().trim().isEmpty()) {
-                            editTitle.setText(value);
-                        } else {
-                            Toast.makeText(this, getString(R.string.scan_title_suggestion, value), Toast.LENGTH_LONG).show();
+                        EditText target = pendingOcrTarget != null ? pendingOcrTarget : editTitle;
+                        target.setText(value);
+                        if (isDetailedOnlyField(target)) {
+                            setDetailedMode(true);
                         }
+                        pendingOcrTarget = null;
+                        Toast.makeText(this, R.string.scan_field_filled, Toast.LENGTH_SHORT).show();
                         break;
                     case OTHER:
                     default:
+                        pendingOcrTarget = null;
                         Toast.makeText(this, getString(R.string.scan_other_code, value), Toast.LENGTH_LONG).show();
                         break;
                 }
@@ -182,10 +187,11 @@ public class AddBookActivity extends AppCompatActivity {
         btnSave.setOnClickListener(v -> saveBook());
         imageAddCover.setOnClickListener(v -> photoPickerLauncher.launch("image/*"));
         layoutIsbn.setEndIconOnClickListener(v -> {
-            android.content.Intent intent = new android.content.Intent(this, ScannerActivity.class);
-            scannerLauncher.launch(intent);
+            pendingOcrTarget = null;
+            openScanner(false);
         });
         btnLookupIsbn.setOnClickListener(v -> lookupIsbnMetadata());
+        enableOcrForAllTextFields();
 
         android.content.Intent intent = getIntent();
         if (intent.hasExtra("EXTRA_ID")) {
@@ -247,6 +253,66 @@ public class AddBookActivity extends AppCompatActivity {
         imageAddCover = findViewById(R.id.image_add_cover);
         containerDetailedFields = findViewById(R.id.container_detailed_fields);
         toggleAddMode = findViewById(R.id.toggle_add_mode);
+    }
+
+    private void enableOcrForAllTextFields() {
+        EditText[] ocrFields = {
+                editTitle, editAuthor, editPageCount,
+                editAsin, editLccn, editOclc,
+                editSubtitle, editOriginalTitle, editSecondaryContributors,
+                editSeriesName, editSeriesNumber,
+                editPublisher, editImprint, editPublicationYear,
+                editEdition, editPrinting, editLanguage, editOriginalLanguage,
+                editFormat, editDimensions, editWeight, editDustJacket,
+                editGenres, editTags, editDewey, editLcc, editDescription,
+                editLocation, editCondition, editDateAcquired,
+                editPurchasePrice, editAcquiredFrom, editReadingStatus,
+                editRating, editPersonalNotes
+        };
+        for (EditText field : ocrFields) {
+            enableOcrScan(field);
+        }
+    }
+
+    private void enableOcrScan(EditText editText) {
+        TextInputLayout layout = findInputLayout(editText);
+        if (layout == null) {
+            return;
+        }
+        layout.setEndIconMode(TextInputLayout.END_ICON_CUSTOM);
+        layout.setEndIconDrawable(R.drawable.ic_camera);
+        layout.setEndIconContentDescription(getString(R.string.scan_field_text));
+        layout.setEndIconOnClickListener(v -> {
+            pendingOcrTarget = editText;
+            if (isDetailedOnlyField(editText)) {
+                setDetailedMode(true);
+            }
+            openScanner(true);
+        });
+    }
+
+    private boolean isDetailedOnlyField(EditText editText) {
+        return editText != editTitle
+                && editText != editAuthor
+                && editText != editIsbn
+                && editText != editPageCount;
+    }
+
+    private static TextInputLayout findInputLayout(EditText editText) {
+        ViewParent parent = editText.getParent();
+        while (parent instanceof View) {
+            if (parent instanceof TextInputLayout) {
+                return (TextInputLayout) parent;
+            }
+            parent = parent.getParent();
+        }
+        return null;
+    }
+
+    private void openScanner(boolean startInOcrMode) {
+        android.content.Intent intent = new android.content.Intent(this, ScannerActivity.class);
+        intent.putExtra(ScannerActivity.EXTRA_START_OCR_MODE, startInOcrMode);
+        scannerLauncher.launch(intent);
     }
 
     private void lookupIsbnMetadata() {

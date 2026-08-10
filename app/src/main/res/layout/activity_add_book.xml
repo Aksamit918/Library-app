@@ -79,7 +79,10 @@
             android:layout_marginStart="24dp"
             android:layout_marginTop="24dp"
             android:layout_marginEnd="24dp"
-            android:hint="@string/book_title">
+            android:hint="@string/book_title"
+            app:endIconContentDescription="@string/scan_title_text"
+            app:endIconDrawable="@drawable/ic_camera"
+            app:endIconMode="custom">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/edit_title"

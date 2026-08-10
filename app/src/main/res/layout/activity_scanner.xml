@@ -11,40 +11,6 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <com.google.android.material.button.MaterialButtonToggleGroup
-        android:id="@+id/toggle_scan_mode"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="24dp"
-        android:layout_marginTop="24dp"
-        android:layout_marginEnd="24dp"
-        android:gravity="center"
-        app:checkedButton="@+id/btn_scan_barcode"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        app:selectionRequired="true"
-        app:singleSelection="true">
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_scan_barcode"
-            style="@style/Widget.Material3.Button.OutlinedButton"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="@string/scan_mode_barcode"
-            android:textColor="@android:color/white" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_scan_ocr"
-            style="@style/Widget.Material3.Button.OutlinedButton"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="@string/scan_mode_ocr"
-            android:textColor="@android:color/white" />
-    </com.google.android.material.button.MaterialButtonToggleGroup>
-
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/card_scanner_frame"
         android:layout_width="260dp"
@@ -76,7 +42,8 @@
         android:textSize="15sp"
         app:layout_constraintBottom_toTopOf="@id/btn_capture_ocr"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent" />
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_goneMarginBottom="32dp" />
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btn_capture_ocr"

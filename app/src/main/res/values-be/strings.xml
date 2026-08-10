@@ -66,10 +66,8 @@
     <string name="lookup_success">Даныя кнігі запоўнены з Open Library</string>
     <string name="lookup_not_found">Кніга з такім ISBN не знойдзена</string>
     <string name="lookup_network_error">Памылка пошуку. Праверце падключэнне да інтэрнэту</string>
-    <string name="scan_mode_barcode">Штрыхкод</string>
-    <string name="scan_mode_ocr">Тэкст OCR</string>
     <string name="capture_text">Распазнаць тэкст</string>
-    <string name="align_text_inside_target_frame">Накіруйце на назву і націсніце «Распазнаць»</string>
+    <string name="align_text_inside_target_frame">Змясціце тэкст у рамку і націсніце «Распазнаць»</string>
     <string name="camera_permission_required">Для сканавання патрэбны дазвол камеры</string>
     <string name="camera_start_failed">Не ўдалося запусціць камеру</string>
     <string name="ocr_capture_failed">Не ўдалося зрабіць здымак</string>
@@ -79,6 +77,16 @@
     <string name="ocr_no_text_found">Тэкст не распазнаны</string>
     <string name="ocr_choose_title_line">Выберыце радок назвы</string>
     <string name="scan_asin_filled">ASIN запоўнены са сканера</string>
+    <string name="scan_field_filled">Поле запоўнена са сканера тэксту</string>
+    <string name="scan_field_text">Сканаваць тэкст у гэта поле</string>
+    <string name="scan_title_filled">Назва запоўнена са сканера тэксту</string>
+    <string name="scan_title_text">Сканаваць назву</string>
     <string name="scan_title_suggestion">Распазнана: %1$s</string>
     <string name="scan_other_code">Адсканаваны код: %1$s</string>
+    <string name="ocr_choose_text_line">Выберыце тэкст (спачатку ўвесь блок)</string>
+    <string name="ocr_result_title">Распазнаны тэкст</string>
+    <string name="ocr_use_full_text">Выкарыстаць увесь тэкст</string>
+    <string name="ocr_pick_single_line">Выбраць адзін радок</string>
+    <string name="ocr_full_text_hint">Націсніце кнопку, каб узяць увесь тэкст</string>
+    <string name="ocr_or_pick_line">Або націсніце адзін радок</string>
 </resources>

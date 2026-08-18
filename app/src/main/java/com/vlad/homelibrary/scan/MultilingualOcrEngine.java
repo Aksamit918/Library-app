@@ -108,8 +108,15 @@ public class MultilingualOcrEngine {
             }
 
             if (script.usesTess()) {
-                OcrResult tess = recognizeWithTess(context, prepared, bands, script, progress);
-                result = mergeResults(result, tess);
+                try {
+                    OcrResult tess = recognizeWithTess(context, prepared, bands, script, progress);
+                    result = mergeResults(result, tess);
+                } catch (Exception e) {
+                    Log.w(TAG, "Tess failed for " + script.id, e);
+                    if (result.isEmpty()) {
+                        throw e;
+                    }
+                }
             }
 
             if (!result.isEmpty()) {

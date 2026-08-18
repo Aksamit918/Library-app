@@ -23,6 +23,17 @@ public class TessdataManager {
             "https://github.com/tesseract-ocr/tessdata_fast/raw/main/"
     };
 
+    private static boolean isScriptPack(String code) {
+        return "Cyrillic".equals(code) || "Latin".equals(code);
+    }
+
+    private static String remoteFilePath(String code) {
+        if (isScriptPack(code)) {
+            return "script/" + code + ".traineddata";
+        }
+        return code + ".traineddata";
+    }
+
     private final OkHttpClient client = new OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(180, TimeUnit.SECONDS)
@@ -82,7 +93,7 @@ public class TessdataManager {
         IOException lastError = null;
         for (String base : TESSDATA_URLS) {
             try {
-                downloadTo(base + code + ".traineddata", target);
+                downloadTo(base + remoteFilePath(code), target);
                 if (target.exists() && target.length() >= MIN_TRAINEDDATA_BYTES) {
                     return;
                 }

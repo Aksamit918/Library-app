@@ -12,15 +12,15 @@ public enum OcrScriptChoice {
             "latin",
             R.string.ocr_script_latin,
             MlKitScript.LATIN,
-            null,
-            null
+            new String[]{"Latin"},
+            "Latin"
     ),
     CYRILLIC(
             "cyrillic",
             R.string.ocr_script_cyrillic,
             MlKitScript.NONE,
-            new String[]{"bel", "rus", "ukr", "eng"},
-            "bel+rus+ukr+eng"
+            new String[]{"Cyrillic"},
+            "Cyrillic"
     ),
     SEMITIC(
             "semitic",

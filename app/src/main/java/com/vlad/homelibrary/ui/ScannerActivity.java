@@ -8,6 +8,7 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Matrix;
 import android.os.Bundle;
+import android.util.Size;
 import android.util.TypedValue;
 import android.view.View;
 import android.view.ViewGroup;
@@ -28,6 +29,8 @@ import androidx.camera.core.ImageCapture;
 import androidx.camera.core.ImageCaptureException;
 import androidx.camera.core.ImageProxy;
 import androidx.camera.core.Preview;
+import androidx.camera.core.resolutionselector.ResolutionSelector;
+import androidx.camera.core.resolutionselector.ResolutionStrategy;
 import androidx.camera.lifecycle.ProcessCameraProvider;
 import androidx.camera.view.PreviewView;
 import androidx.core.content.ContextCompat;
@@ -267,7 +270,12 @@ public class ScannerActivity extends AppCompatActivity {
                     ? previewView.getDisplay().getRotation()
                     : android.view.Surface.ROTATION_0;
             imageCapture = new ImageCapture.Builder()
-                    .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+                    .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
+                    .setResolutionSelector(new ResolutionSelector.Builder()
+                            .setResolutionStrategy(new ResolutionStrategy(
+                                    new Size(1920, 1440),
+                                    ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER))
+                            .build())
                     .setTargetRotation(rotation)
                     .build();
             cameraProvider.bindToLifecycle(
@@ -348,30 +356,34 @@ public class ScannerActivity extends AppCompatActivity {
         progressScan.setVisibility(View.VISIBLE);
 
         imageCapture.takePicture(
-                ContextCompat.getMainExecutor(this),
+                LibraryDatabase.databaseWriteExecutor,
                 new ImageCapture.OnImageCapturedCallback() {
                     @Override
                     public void onCaptureSuccess(@NonNull ImageProxy image) {
                         Bitmap bitmap = imageProxyToBitmap(image);
                         image.close();
-                        capturingPhoto = false;
-                        progressScan.setVisibility(View.GONE);
-                        btnTakePhoto.setEnabled(true);
+                        runOnUiThread(() -> {
+                            capturingPhoto = false;
+                            progressScan.setVisibility(View.GONE);
+                            btnTakePhoto.setEnabled(true);
 
-                        if (bitmap == null) {
-                            Toast.makeText(ScannerActivity.this, R.string.ocr_capture_failed, Toast.LENGTH_SHORT).show();
-                            return;
-                        }
-                        enterPhotoSelection(bitmap);
+                            if (bitmap == null) {
+                                Toast.makeText(ScannerActivity.this, R.string.ocr_capture_failed, Toast.LENGTH_SHORT).show();
+                                return;
+                            }
+                            enterPhotoSelection(bitmap);
+                        });
                     }
 
                     @Override
                     public void onError(@NonNull ImageCaptureException exception) {
                         exception.printStackTrace();
-                        capturingPhoto = false;
-                        progressScan.setVisibility(View.GONE);
-                        btnTakePhoto.setEnabled(true);
-                        Toast.makeText(ScannerActivity.this, R.string.ocr_capture_failed, Toast.LENGTH_SHORT).show();
+                        runOnUiThread(() -> {
+                            capturingPhoto = false;
+                            progressScan.setVisibility(View.GONE);
+                            btnTakePhoto.setEnabled(true);
+                            Toast.makeText(ScannerActivity.this, R.string.ocr_capture_failed, Toast.LENGTH_SHORT).show();
+                        });
                     }
                 }
         );

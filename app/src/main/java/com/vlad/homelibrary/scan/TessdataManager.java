@@ -17,16 +17,16 @@ import okhttp3.ResponseBody;
 
 public class TessdataManager {
 
-    public static final String[] CYRILLIC_LANGUAGE_CODES = {"rus", "ukr", "eng"};
-
-    private static final String TESSDATA_BEST_URL =
-            "https://github.com/tesseract-ocr/tessdata_best/raw/main/";
-    private static final String TESSDATA_FAST_URL =
-            "https://github.com/tesseract-ocr/tessdata_fast/raw/main/";
+    private static final long MIN_TRAINEDDATA_BYTES = 50_000L;
+    private static final String[] TESSDATA_URLS = {
+            "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/main/",
+            "https://github.com/tesseract-ocr/tessdata_fast/raw/main/"
+    };
 
     private final OkHttpClient client = new OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(180, TimeUnit.SECONDS)
+            .followRedirects(true)
             .build();
 
     public File getTessParentDir(Context context) {
@@ -41,8 +41,7 @@ public class TessdataManager {
         File dir = getTessdataDir(context);
         for (String code : codes) {
             File file = new File(dir, code + ".traineddata");
-            long minBytes = isBestModelCode(code) ? 1_500_000L : 1000L;
-            if (!file.exists() || file.length() < minBytes) {
+            if (!file.exists() || file.length() < MIN_TRAINEDDATA_BYTES) {
                 return false;
             }
         }
@@ -59,8 +58,7 @@ public class TessdataManager {
         List<String> missing = new ArrayList<>();
         for (String code : codes) {
             File file = new File(dir, code + ".traineddata");
-            long minBytes = isBestModelCode(code) ? 1_500_000L : 1000L;
-            if (!file.exists() || file.length() < minBytes) {
+            if (!file.exists() || file.length() < MIN_TRAINEDDATA_BYTES) {
                 if (file.exists()) {
                     //noinspection ResultOfMethodCallIgnored
                     file.delete();
@@ -81,22 +79,41 @@ public class TessdataManager {
 
     private void downloadLanguage(File tessdataDir, String code) throws IOException {
         File target = new File(tessdataDir, code + ".traineddata");
-        File temp = new File(tessdataDir, code + ".traineddata.partial");
-        String base = isBestModelCode(code) ? TESSDATA_BEST_URL : TESSDATA_FAST_URL;
+        IOException lastError = null;
+        for (String base : TESSDATA_URLS) {
+            try {
+                downloadTo(base + code + ".traineddata", target);
+                if (target.exists() && target.length() >= MIN_TRAINEDDATA_BYTES) {
+                    return;
+                }
+            } catch (IOException e) {
+                lastError = e;
+                if (target.exists()) {
+                    //noinspection ResultOfMethodCallIgnored
+                    target.delete();
+                }
+            }
+        }
+        throw lastError != null
+                ? lastError
+                : new IOException("Failed to download " + code);
+    }
 
+    private void downloadTo(String url, File target) throws IOException {
+        File temp = new File(target.getAbsolutePath() + ".partial");
         Request request = new Request.Builder()
-                .url(base + code + ".traineddata")
+                .url(url)
                 .header("User-Agent", "HomeLibraryAndroid/1.0")
                 .get()
                 .build();
 
         try (Response response = client.newCall(request).execute()) {
             if (!response.isSuccessful()) {
-                throw new IOException("Failed to download " + code + ": HTTP " + response.code());
+                throw new IOException("Failed to download " + url + ": HTTP " + response.code());
             }
             ResponseBody body = response.body();
             if (body == null) {
-                throw new IOException("Empty body for " + code);
+                throw new IOException("Empty body for " + url);
             }
 
             try (InputStream inputStream = body.byteStream();
@@ -121,10 +138,6 @@ public class TessdataManager {
             }
             throw e;
         }
-    }
-
-    private static boolean isBestModelCode(String code) {
-        return "rus".equals(code) || "ukr".equals(code);
     }
 
     public interface ProgressCallback {

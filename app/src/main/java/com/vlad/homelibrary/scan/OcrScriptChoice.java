@@ -11,71 +11,69 @@ public enum OcrScriptChoice {
     LATIN(
             "latin",
             R.string.ocr_script_latin,
-            new PaddleOcrModelManager.ScriptPack[]{
-                    PaddleOcrModelManager.ScriptPack.ENGLISH,
-                    PaddleOcrModelManager.ScriptPack.LATIN
-            },
+            MlKitScript.LATIN,
             null,
             null
     ),
     CYRILLIC(
             "cyrillic",
             R.string.ocr_script_cyrillic,
-            new PaddleOcrModelManager.ScriptPack[]{PaddleOcrModelManager.ScriptPack.ESLAV},
-            TessdataManager.CYRILLIC_LANGUAGE_CODES,
-            "rus+ukr+eng"
+            MlKitScript.NONE,
+            new String[]{"bel", "rus", "ukr", "eng"},
+            "bel+rus+ukr+eng"
     ),
     SEMITIC(
             "semitic",
             R.string.ocr_script_semitic,
-            new PaddleOcrModelManager.ScriptPack[]{PaddleOcrModelManager.ScriptPack.ARABIC},
-            new String[]{"heb", "eng"},
-            "heb"
+            MlKitScript.NONE,
+            new String[]{"ara", "heb"},
+            "ara+heb"
     ),
     PERSIAN(
             "persian",
             R.string.ocr_script_persian,
-            new PaddleOcrModelManager.ScriptPack[]{PaddleOcrModelManager.ScriptPack.ARABIC},
-            null,
-            null
+            MlKitScript.NONE,
+            new String[]{"fas", "ara"},
+            "fas+ara"
     ),
     ARMENIAN(
             "armenian",
             R.string.ocr_script_armenian,
-            null,
+            MlKitScript.NONE,
             new String[]{"hye", "eng"},
-            "hye"
+            "hye+eng"
     ),
     GEORGIAN(
             "georgian",
             R.string.ocr_script_georgian,
-            null,
+            MlKitScript.NONE,
             new String[]{"kat", "eng"},
-            "kat"
+            "kat+eng"
     ),
     GREEK(
             "greek",
             R.string.ocr_script_greek,
-            new PaddleOcrModelManager.ScriptPack[]{PaddleOcrModelManager.ScriptPack.GREEK},
-            null,
-            null
+            MlKitScript.NONE,
+            new String[]{"ell", "eng"},
+            "ell+eng"
     ),
     JCK(
             "jck",
             R.string.ocr_script_jck,
-            new PaddleOcrModelManager.ScriptPack[]{
-                    PaddleOcrModelManager.ScriptPack.CHINESE,
-                    PaddleOcrModelManager.ScriptPack.KOREAN
-            },
+            MlKitScript.CJK,
             null,
             null
     );
 
+    public enum MlKitScript {
+        NONE, LATIN, CJK
+    }
+
     public final String id;
     @StringRes
     public final int labelRes;
-    @Nullable
-    public final PaddleOcrModelManager.ScriptPack[] paddlePacks;
+    @NonNull
+    public final MlKitScript mlKitScript;
     @Nullable
     public final String[] tessLanguageCodes;
     @Nullable
@@ -83,18 +81,18 @@ public enum OcrScriptChoice {
 
     OcrScriptChoice(String id,
                     @StringRes int labelRes,
-                    @Nullable PaddleOcrModelManager.ScriptPack[] paddlePacks,
+                    @NonNull MlKitScript mlKitScript,
                     @Nullable String[] tessLanguageCodes,
                     @Nullable String tessInitLangs) {
         this.id = id;
         this.labelRes = labelRes;
-        this.paddlePacks = paddlePacks;
+        this.mlKitScript = mlKitScript;
         this.tessLanguageCodes = tessLanguageCodes;
         this.tessInitLangs = tessInitLangs;
     }
 
-    public boolean usesPaddle() {
-        return paddlePacks != null && paddlePacks.length > 0;
+    public boolean usesMlKit() {
+        return mlKitScript != MlKitScript.NONE;
     }
 
     public boolean usesTess() {

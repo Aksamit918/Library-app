@@ -102,6 +102,10 @@
     <string name="ocr_pick_single_line">Выбраць адзін радок</string>
     <string name="ocr_full_text_hint">Націсніце кнопку, каб узяць увесь тэкст</string>
     <string name="ocr_or_pick_line">Або націсніце адзін радок</string>
+    <string name="ocr_select_lines_hint">Націсніце радкі, якія хочаце выкарыстаць</string>
+    <string name="ocr_selected_hint">Выбраны тэкст</string>
+    <string name="ocr_selected_preview_empty">Радкі не выбраны</string>
+    <string name="ocr_use_selected_text">Выкарыстаць выбраны тэкст</string>
     <string name="take_photo_of_cover">Сфатаграфуйце вокладку кнігі</string>
     <string name="adjust_cover_edges">Пацягніце пункцірныя краі, каб падганіць вокладку, затым пацвердзіце</string>
     <string name="finding_cover_edges">Шукаем краі вокладкі…</string>

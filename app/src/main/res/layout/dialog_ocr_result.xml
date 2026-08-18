@@ -7,18 +7,35 @@
     android:padding="20dp">
 
     <TextView
+        android:id="@+id/text_ocr_lines_hint"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:paddingBottom="8dp"
-        android:text="@string/ocr_full_text_hint"
+        android:text="@string/ocr_select_lines_hint"
+        android:textAppearance="?attr/textAppearanceBodyMedium" />
+
+    <ListView
+        android:id="@+id/list_ocr_lines"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:choiceMode="multipleChoice"
+        android:divider="@android:color/transparent"
+        android:dividerHeight="4dp"
+        android:nestedScrollingEnabled="true" />
+
+    <TextView
+        android:id="@+id/text_ocr_selected_hint"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingTop="16dp"
+        android:paddingBottom="8dp"
+        android:text="@string/ocr_selected_hint"
         android:textAppearance="?attr/textAppearanceBodyMedium" />
 
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/card_ocr_full_text"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:clickable="true"
-        android:focusable="true"
         app:cardCornerRadius="12dp"
         app:cardElevation="0dp"
         app:strokeColor="?attr/colorOutline"
@@ -38,22 +55,6 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="10dp"
-        android:text="@string/ocr_use_full_text" />
-
-    <TextView
-        android:id="@+id/text_ocr_lines_hint"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:paddingTop="16dp"
-        android:paddingBottom="8dp"
-        android:text="@string/ocr_or_pick_line"
-        android:textAppearance="?attr/textAppearanceBodyMedium" />
-
-    <ListView
-        android:id="@+id/list_ocr_lines"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:divider="?android:attr/listDivider"
-        android:dividerHeight="1dp"
-        android:nestedScrollingEnabled="true" />
+        android:enabled="false"
+        android:text="@string/ocr_use_selected_text" />
 </LinearLayout>

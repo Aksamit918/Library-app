@@ -102,6 +102,10 @@
     <string name="ocr_pick_single_line">Elegir una línea</string>
     <string name="ocr_full_text_hint">Pulsa el botón para usar el texto completo</string>
     <string name="ocr_or_pick_line">O pulsa una línea</string>
+    <string name="ocr_select_lines_hint">Pulsa las líneas que quieres usar</string>
+    <string name="ocr_selected_hint">Texto seleccionado</string>
+    <string name="ocr_selected_preview_empty">No hay líneas seleccionadas</string>
+    <string name="ocr_use_selected_text">Usar texto seleccionado</string>
     <string name="take_photo_of_cover">Haz una foto de la cubierta del libro</string>
     <string name="adjust_cover_edges">Arrastra los bordes de puntos para ajustar la cubierta y luego confirma</string>
     <string name="finding_cover_edges">Buscando los bordes de la cubierta…</string>

@@ -101,6 +101,10 @@
     <string name="ocr_pick_single_line">Pick one line</string>
     <string name="ocr_full_text_hint">Tap the button to use the full text</string>
     <string name="ocr_or_pick_line">Or tap one line</string>
+    <string name="ocr_select_lines_hint">Tap the lines you want to use</string>
+    <string name="ocr_selected_hint">Selected text</string>
+    <string name="ocr_selected_preview_empty">No lines selected</string>
+    <string name="ocr_use_selected_text">Use selected text</string>
     <string name="take_photo_of_cover">Take a photo of the book cover</string>
     <string name="adjust_cover_edges">Drag the dotted edges to fit the cover, then approve</string>
     <string name="finding_cover_edges">Finding cover edges…</string>

@@ -2,6 +2,7 @@ package com.vlad.homelibrary.scan;
 
 import android.content.Context;
 import android.graphics.Bitmap;
+import android.graphics.Rect;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
@@ -16,6 +17,7 @@ import com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions;
 import com.google.mlkit.vision.text.japanese.JapaneseTextRecognizerOptions;
 import com.google.mlkit.vision.text.korean.KoreanTextRecognizerOptions;
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
+import com.googlecode.tesseract.android.ResultIterator;
 import com.googlecode.tesseract.android.TessBaseAPI;
 
 import java.util.ArrayList;
@@ -32,7 +34,8 @@ public class MultilingualOcrEngine {
     private static final String TAG = "HomeLibraryOCR";
     private static final int OCR_MIN_SIDE_PX = 480;
     private static final int OCR_MAX_SIDE_PX = 1920;
-    private static final int LINE_MIN_SIDE_PX = 72;
+    private static final int LINE_MIN_SIDE_PX = 96;
+    private static final String DIGIT_WHITELIST = "0123456789";
 
     public static final class OcrResult {
         public final String fullText;
@@ -57,10 +60,18 @@ public class MultilingualOcrEngine {
     private static final class LocatedLine {
         final String text;
         final int top;
+        final int left;
+        final int height;
 
         LocatedLine(String text, int top) {
+            this(text, top, 0, 0);
+        }
+
+        LocatedLine(String text, int top, int left, int height) {
             this.text = text;
             this.top = top;
+            this.left = left;
+            this.height = height;
         }
     }
 
@@ -204,15 +215,20 @@ public class MultilingualOcrEngine {
         Text text = Tasks.await(recognizer.process(image), 20, TimeUnit.SECONDS);
         for (Text.TextBlock block : text.getTextBlocks()) {
             for (Text.Line line : block.getLines()) {
-                String cleaned = cleanFragment(line.getText());
-                if (!isKeepableLine(cleaned)) {
+                String cleaned = OcrTextNormalizer.normalizeAuthorInitials(line.getText());
+                if (!OcrTextNormalizer.isKeepableLine(cleaned)) {
                     continue;
                 }
                 int top = topOffset;
+                int left = 0;
+                int height = 0;
                 if (line.getBoundingBox() != null) {
-                    top += line.getBoundingBox().top;
+                    Rect box = line.getBoundingBox();
+                    top += box.top;
+                    left = box.left;
+                    height = box.height();
                 }
-                out.add(new LocatedLine(cleaned, top));
+                out.add(new LocatedLine(cleaned, top, left, height));
             }
         }
     }
@@ -246,12 +262,16 @@ public class MultilingualOcrEngine {
             tess.setVariable("preserve_interword_spaces", "1");
             tess.setVariable("user_defined_dpi", "300");
             tess.setVariable("tessedit_do_invert", "0");
+            tess.setVariable(TessBaseAPI.VAR_CHAR_WHITELIST, "");
+            tess.setVariable(TessBaseAPI.VAR_CHAR_BLACKLIST, "");
 
             collectTessVariants(tess, image, 0, false, located);
+            collectDigitPass(tess, image, 0, located);
             for (OcrImagePrep.TextBand band : bands) {
                 Bitmap scaled = OcrImagePrep.fitForOcr(band.bitmap, LINE_MIN_SIDE_PX, OCR_MAX_SIDE_PX);
                 try {
                     collectTessVariants(tess, scaled, band.top, true, located);
+                    collectDigitPass(tess, scaled, band.top, located);
                 } finally {
                     OcrImagePrep.recycleQuietly(scaled, band.bitmap);
                 }
@@ -280,29 +300,12 @@ public class MultilingualOcrEngine {
             }
         }
         try {
-            int[] pageSegModes;
-            if (singleLine) {
-                pageSegModes = new int[]{
-                        TessBaseAPI.PageSegMode.PSM_SINGLE_LINE,
-                        TessBaseAPI.PageSegMode.PSM_SINGLE_BLOCK
-                };
-            } else if (darkCover) {
-                pageSegModes = new int[]{
-                        TessBaseAPI.PageSegMode.PSM_SPARSE_TEXT,
-                        TessBaseAPI.PageSegMode.PSM_AUTO,
-                        TessBaseAPI.PageSegMode.PSM_SINGLE_BLOCK
-                };
-            } else {
-                pageSegModes = new int[]{
-                        TessBaseAPI.PageSegMode.PSM_SPARSE_TEXT,
-                        TessBaseAPI.PageSegMode.PSM_AUTO
-                };
-            }
+            int[] pageSegModes = pageSegModesFor(source, singleLine);
             int before = out.size();
             for (Bitmap variant : variants) {
                 for (int psm : pageSegModes) {
                     collectTess(tess, variant, psm, topOffset, out);
-                    if (singleLine && addedGoodLine(out, before)) {
+                    if (singleLine && addedStableLetterLine(out, before)) {
                         break;
                     }
                 }
@@ -314,13 +317,85 @@ public class MultilingualOcrEngine {
         }
     }
 
-    private static boolean addedGoodLine(List<LocatedLine> lines, int fromIndex) {
+    @NonNull
+    private static int[] pageSegModesFor(@NonNull Bitmap source, boolean singleLine) {
+        boolean wideLine = source.getWidth() > source.getHeight() * 2;
+        boolean compactNumber = source.getWidth() < source.getHeight() * 4
+                && source.getHeight() >= 24;
+        if (singleLine) {
+            if (compactNumber && !wideLine) {
+                return new int[]{
+                        TessBaseAPI.PageSegMode.PSM_SINGLE_LINE,
+                        TessBaseAPI.PageSegMode.PSM_SINGLE_WORD,
+                        TessBaseAPI.PageSegMode.PSM_SINGLE_BLOCK
+                };
+            }
+            return new int[]{
+                    TessBaseAPI.PageSegMode.PSM_SINGLE_LINE,
+                    TessBaseAPI.PageSegMode.PSM_SINGLE_BLOCK
+            };
+        }
+        if (wideLine) {
+            return new int[]{
+                    TessBaseAPI.PageSegMode.PSM_SINGLE_LINE,
+                    TessBaseAPI.PageSegMode.PSM_AUTO,
+                    TessBaseAPI.PageSegMode.PSM_SINGLE_BLOCK
+            };
+        }
+        return new int[]{
+                TessBaseAPI.PageSegMode.PSM_AUTO,
+                TessBaseAPI.PageSegMode.PSM_SINGLE_BLOCK,
+                TessBaseAPI.PageSegMode.PSM_SPARSE_TEXT
+        };
+    }
+
+    private static boolean addedStableLetterLine(List<LocatedLine> lines, int fromIndex) {
         for (int i = fromIndex; i < lines.size(); i++) {
-            if (countAlnum(lines.get(i).text) >= 4) {
+            String text = lines.get(i).text;
+            if (OcrTextNormalizer.isMostlyDigits(text)
+                    || OcrTextNormalizer.looksLikeInitials(text)) {
+                continue;
+            }
+            if (countScript(text, Character::isLetter) >= 6) {
                 return true;
             }
         }
         return false;
+    }
+
+    private static void collectDigitPass(TessBaseAPI tess,
+                                         Bitmap source,
+                                         int topOffset,
+                                         List<LocatedLine> out) {
+        Bitmap polarity = OcrImagePrep.ensureDarkTextOnLight(source);
+        tess.setVariable(TessBaseAPI.VAR_CHAR_WHITELIST, DIGIT_WHITELIST);
+        try {
+            int[] modes = {
+                    TessBaseAPI.PageSegMode.PSM_SINGLE_WORD,
+                    TessBaseAPI.PageSegMode.PSM_SINGLE_LINE,
+                    TessBaseAPI.PageSegMode.PSM_RAW_LINE
+            };
+            for (int psm : modes) {
+                tess.setPageSegMode(psm);
+                tess.setImage(polarity);
+                String raw = tess.getUTF8Text();
+                String digits = OcrTextNormalizer.extractDigitRun(raw);
+                if (digits.length() >= 2) {
+                    out.add(new LocatedLine(
+                            digits,
+                            topOffset,
+                            0,
+                            polarity.getHeight()
+                    ));
+                    break;
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Digit pass failed", e);
+        } finally {
+            tess.setVariable(TessBaseAPI.VAR_CHAR_WHITELIST, "");
+            OcrImagePrep.recycleQuietly(polarity, source);
+        }
     }
 
     private static void collectTess(TessBaseAPI tess,
@@ -331,16 +406,55 @@ public class MultilingualOcrEngine {
         try {
             tess.setPageSegMode(pageSegMode);
             tess.setImage(prepared);
-            int lineTop = topOffset;
-            for (String part : splitAndCleanLines(tess.getUTF8Text())) {
-                if (!isKeepableLine(part)) {
-                    continue;
-                }
-                out.add(new LocatedLine(part, lineTop));
-                lineTop += 8;
+            tess.getUTF8Text();
+            ResultIterator iterator = tess.getResultIterator();
+            if (iterator == null) {
+                collectTessFromPlainText(tess, topOffset, out);
+                return;
+            }
+            try {
+                int level = TessBaseAPI.PageIteratorLevel.RIL_TEXTLINE;
+                iterator.begin();
+                do {
+                    String part = iterator.getUTF8Text(level);
+                    if (part == null) {
+                        continue;
+                    }
+                    String cleaned = OcrTextNormalizer.normalizeAuthorInitials(part);
+                    if (!OcrTextNormalizer.isKeepableLine(cleaned)) {
+                        continue;
+                    }
+                    Rect box = iterator.getBoundingRect(level);
+                    int top = topOffset;
+                    int left = 0;
+                    int height = 0;
+                    if (box != null) {
+                        top += box.top;
+                        left = box.left;
+                        height = box.height();
+                    }
+                    out.add(new LocatedLine(cleaned, top, left, height));
+                } while (iterator.next(level));
+            } finally {
+                iterator.delete();
             }
         } catch (Exception e) {
             Log.e(TAG, "Tess page failed psm=" + pageSegMode, e);
+        }
+    }
+
+    private static void collectTessFromPlainText(TessBaseAPI tess,
+                                                 int topOffset,
+                                                 List<LocatedLine> out) {
+        String raw = tess.getUTF8Text();
+        int lineTop = topOffset;
+        for (String part : splitAndCleanLines(raw)) {
+            String cleaned = OcrTextNormalizer.normalizeAuthorInitials(part);
+            if (!OcrTextNormalizer.isKeepableLine(cleaned)) {
+                continue;
+            }
+            out.add(new LocatedLine(cleaned, lineTop));
+            lineTop += 8;
         }
     }
 
@@ -367,77 +481,137 @@ public class MultilingualOcrEngine {
 
     @NonNull
     private static OcrResult buildResultFromLocated(List<LocatedLine> located) {
-        List<LocatedLine> sorted = new ArrayList<>(located);
-        sorted.sort(Comparator
-                .comparingInt((LocatedLine line) -> line.top)
-                .thenComparingInt(line -> -line.text.length()));
-
-        List<String> merged = new ArrayList<>();
-        for (LocatedLine candidate : sorted) {
-            int index = indexOfSimilar(merged, candidate.text);
-            if (index < 0) {
-                merged.add(candidate.text);
-                continue;
-            }
-            if (countAlnum(candidate.text) > countAlnum(merged.get(index))) {
-                merged.set(index, candidate.text);
-            }
+        List<String> merged = mergeSimilar(located);
+        merged = joinSameVisualLine(located, merged);
+        List<String> normalized = new ArrayList<>();
+        for (String line : merged) {
+            normalized.add(OcrTextNormalizer.normalizeAuthorInitials(line));
         }
-        return buildResultFromLines(merged);
-    }
-
-    private static int indexOfSimilar(List<String> lines, String candidate) {
-        String key = lettersKey(candidate);
-        if (key.length() < 2) {
-            return -1;
-        }
-        for (int i = 0; i < lines.size(); i++) {
-            String other = lettersKey(lines.get(i));
-            if (other.equals(key)) {
-                return i;
-            }
-            String shorter = key.length() <= other.length() ? key : other;
-            String longer = key.length() <= other.length() ? other : key;
-            if (longer.contains(shorter)
-                    && (shorter.length() * 100 >= longer.length() * 55
-                    || longer.startsWith(shorter)
-                    || longer.endsWith(shorter))) {
-                return i;
-            }
-        }
-        return -1;
+        return buildResultFromLines(mergeSimilarTexts(normalized));
     }
 
     @NonNull
-    private static String lettersKey(String text) {
-        StringBuilder builder = new StringBuilder();
-        for (int i = 0; i < text.length(); ) {
-            int cp = text.codePointAt(i);
-            if (Character.isLetter(cp) || Character.isDigit(cp)) {
-                builder.appendCodePoint(Character.toLowerCase(cp));
+    private static List<String> mergeSimilar(List<LocatedLine> located) {
+        List<LocatedLine> sorted = new ArrayList<>(located);
+        sorted.sort(Comparator
+                .comparingInt((LocatedLine line) -> line.top)
+                .thenComparingInt(line -> line.left)
+                .thenComparingInt(line -> -line.text.length()));
+        return mergeSimilarTexts(toTexts(sorted));
+    }
+
+    @NonNull
+    private static List<String> mergeSimilarTexts(List<String> lines) {
+        List<String> merged = new ArrayList<>();
+        for (String candidate : lines) {
+            String cleaned = OcrTextNormalizer.cleanFragment(candidate);
+            int index = OcrTextNormalizer.indexOfSimilar(merged, cleaned);
+            if (index < 0) {
+                merged.add(cleaned);
+                continue;
             }
-            i += Character.charCount(cp);
+            if (shouldReplace(merged.get(index), cleaned)) {
+                merged.set(index, cleaned);
+            }
         }
-        return builder.toString();
+        return merged;
+    }
+
+    private static boolean shouldReplace(String current, String candidate) {
+        if (OcrTextNormalizer.isMostlyDigits(candidate)
+                && OcrTextNormalizer.isMostlyDigits(current)) {
+            return candidate.length() >= current.length();
+        }
+        return OcrTextNormalizer.countAlnum(candidate) > OcrTextNormalizer.countAlnum(current);
+    }
+
+    @NonNull
+    private static List<String> joinSameVisualLine(List<LocatedLine> located, List<String> merged) {
+        List<LocatedLine> withBoxes = new ArrayList<>();
+        for (LocatedLine line : located) {
+            if (line.height <= 0) {
+                continue;
+            }
+            String cleaned = OcrTextNormalizer.cleanFragment(line.text);
+            if (!OcrTextNormalizer.isKeepableLine(cleaned)
+                    && !OcrTextNormalizer.looksLikeInitials(cleaned)) {
+                continue;
+            }
+            withBoxes.add(new LocatedLine(cleaned, line.top, line.left, line.height));
+        }
+        if (withBoxes.size() < 2) {
+            return merged;
+        }
+        withBoxes.sort(Comparator
+                .comparingInt((LocatedLine line) -> line.top)
+                .thenComparingInt(line -> line.left));
+
+        List<LocatedLine> joined = new ArrayList<>();
+        for (LocatedLine line : withBoxes) {
+            if (joined.isEmpty()) {
+                joined.add(line);
+                continue;
+            }
+            LocatedLine prev = joined.get(joined.size() - 1);
+            if (sameVisualLine(prev, line)
+                    && !OcrTextNormalizer.isMostlyDigits(prev.text)
+                    && !OcrTextNormalizer.isMostlyDigits(line.text)
+                    && !containsLetters(prev.text, line.text)
+                    && !containsLetters(line.text, prev.text)) {
+                String leftText = prev.left <= line.left ? prev.text : line.text;
+                String rightText = prev.left <= line.left ? line.text : prev.text;
+                joined.set(joined.size() - 1, new LocatedLine(
+                        OcrTextNormalizer.cleanFragment(leftText + " " + rightText),
+                        Math.min(prev.top, line.top),
+                        Math.min(prev.left, line.left),
+                        Math.max(prev.height, line.height)
+                ));
+            } else {
+                joined.add(line);
+            }
+        }
+        List<String> combined = new ArrayList<>(merged);
+        for (LocatedLine line : joined) {
+            if (OcrTextNormalizer.indexOfSimilar(combined, line.text) < 0) {
+                combined.add(line.text);
+            }
+        }
+        return combined;
+    }
+
+    private static boolean sameVisualLine(@NonNull LocatedLine a, @NonNull LocatedLine b) {
+        if (a.height <= 0 || b.height <= 0) {
+            return false;
+        }
+        int minH = Math.min(a.height, b.height);
+        int maxH = Math.max(a.height, b.height);
+        if (minH * 10 < maxH * 6) {
+            return false;
+        }
+        return Math.abs(a.top - b.top) <= Math.max(6, minH / 2);
+    }
+
+    private static boolean containsLetters(String a, String b) {
+        String keyA = OcrTextNormalizer.lettersKey(a);
+        String keyB = OcrTextNormalizer.lettersKey(b);
+        return !keyA.isEmpty() && !keyB.isEmpty() && keyA.contains(keyB);
+    }
+
+    @NonNull
+    private static List<String> toTexts(List<LocatedLine> located) {
+        List<String> texts = new ArrayList<>(located.size());
+        for (LocatedLine line : located) {
+            texts.add(line.text);
+        }
+        return texts;
     }
 
     private static int countAlnum(@Nullable String text) {
-        return countScript(text, cp -> Character.isLetter(cp) || Character.isDigit(cp));
+        return OcrTextNormalizer.countAlnum(text);
     }
 
     private static int countScript(@Nullable String text, IntPredicate matcher) {
-        if (text == null || text.isEmpty()) {
-            return 0;
-        }
-        int count = 0;
-        for (int i = 0; i < text.length(); ) {
-            int cp = text.codePointAt(i);
-            if (matcher.test(cp)) {
-                count++;
-            }
-            i += Character.charCount(cp);
-        }
-        return count;
+        return OcrTextNormalizer.countScript(text, matcher);
     }
 
     private static boolean isHangul(int cp) {
@@ -453,7 +627,7 @@ public class MultilingualOcrEngine {
     @NonNull
     private static OcrResult buildResultFromLines(List<String> lines) {
         List<String> filtered = filterLines(lines);
-        String fullText = filtered.isEmpty() ? "" : cleanFragment(String.join(" ", filtered));
+        String fullText = filtered.isEmpty() ? "" : String.join(" ", filtered);
         Set<String> options = new LinkedHashSet<>();
         if (!fullText.isEmpty()) {
             options.add(fullText);
@@ -467,21 +641,45 @@ public class MultilingualOcrEngine {
     private static List<String> filterLines(List<String> lines) {
         List<String> out = new ArrayList<>();
         for (String line : lines) {
-            String cleaned = cleanFragment(line);
-            if (isKeepableLine(cleaned)) {
-                out.add(cleaned);
+            for (String part : OcrTextNormalizer.explodeMixedNumberLine(line)) {
+                String cleaned = OcrTextNormalizer.normalizeAuthorInitials(part);
+                if (OcrTextNormalizer.isKeepableLine(cleaned)
+                        && OcrTextNormalizer.indexOfSimilar(out, cleaned) < 0) {
+                    out.add(cleaned);
+                }
+            }
+        }
+        return dropCoveredFragments(out);
+    }
+
+    @NonNull
+    private static List<String> dropCoveredFragments(List<String> lines) {
+        List<String> out = new ArrayList<>();
+        for (int i = 0; i < lines.size(); i++) {
+            String line = lines.get(i);
+            if (OcrTextNormalizer.isMostlyDigits(line)) {
+                out.add(line);
+                continue;
+            }
+            String key = OcrTextNormalizer.lettersKey(line);
+            boolean covered = false;
+            if (OcrTextNormalizer.looksLikeInitials(line) || key.length() <= 4) {
+                for (int j = 0; j < lines.size(); j++) {
+                    if (i == j) {
+                        continue;
+                    }
+                    String other = OcrTextNormalizer.lettersKey(lines.get(j));
+                    if (other.length() > key.length() && other.contains(key)) {
+                        covered = true;
+                        break;
+                    }
+                }
+            }
+            if (!covered) {
+                out.add(line);
             }
         }
         return out;
-    }
-
-    private static boolean isKeepableLine(String cleaned) {
-        if (cleaned == null || cleaned.isEmpty()) {
-            return false;
-        }
-        int letters = countScript(cleaned, Character::isLetter);
-        int digits = countScript(cleaned, Character::isDigit);
-        return letters >= 2 || digits >= 3 || letters + digits >= 3;
     }
 
     private static List<String> splitAndCleanLines(String text) {
@@ -490,24 +688,12 @@ public class MultilingualOcrEngine {
             return lines;
         }
         for (String part : text.split("\\R")) {
-            String cleaned = cleanFragment(part);
+            String cleaned = OcrTextNormalizer.cleanFragment(part);
             if (!cleaned.isEmpty()) {
                 lines.add(cleaned);
             }
         }
         return lines;
-    }
-
-    private static String cleanFragment(String value) {
-        if (value == null) {
-            return "";
-        }
-        String cleaned = value.trim();
-        cleaned = cleaned.replace('\u00A0', ' ');
-        cleaned = cleaned.replaceAll("^[|_=\\-•·«»\"'“”]+", "");
-        cleaned = cleaned.replaceAll("[|_=\\-•·«»\"'“”]+$", "");
-        cleaned = cleaned.replaceAll("\\s+", " ").trim();
-        return cleaned;
     }
 
     private static String safePreview(@Nullable String text) {

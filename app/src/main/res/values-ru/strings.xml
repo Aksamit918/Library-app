@@ -102,6 +102,10 @@
     <string name="ocr_pick_single_line">Выбрать одну строку</string>
     <string name="ocr_full_text_hint">Нажмите кнопку, чтобы взять весь текст</string>
     <string name="ocr_or_pick_line">Или нажмите одну строку</string>
+    <string name="ocr_select_lines_hint">Нажмите строки, которые хотите использовать</string>
+    <string name="ocr_selected_hint">Выбранный текст</string>
+    <string name="ocr_selected_preview_empty">Строки не выбраны</string>
+    <string name="ocr_use_selected_text">Использовать выбранный текст</string>
     <string name="take_photo_of_cover">Сфотографируйте обложку книги</string>
     <string name="adjust_cover_edges">Потяните пунктирные края, чтобы подогнать обложку, затем подтвердите</string>
     <string name="finding_cover_edges">Ищем края обложки…</string>

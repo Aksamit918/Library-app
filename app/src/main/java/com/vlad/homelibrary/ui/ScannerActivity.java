@@ -11,9 +11,13 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.util.Size;
 import android.util.TypedValue;
+import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.BaseAdapter;
+import android.widget.CheckBox;
 import android.widget.LinearLayout;
+import android.widget.ListView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -59,6 +63,7 @@ import com.vlad.homelibrary.scan.ScanZoneHelper;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -834,15 +839,27 @@ public class ScannerActivity extends AppCompatActivity {
             return;
         }
 
-        final String fullText = ocrResult.fullText;
-        View dialogView = getLayoutInflater().inflate(R.layout.dialog_ocr_result, null);
-        View cardFullText = dialogView.findViewById(R.id.card_ocr_full_text);
-        TextView textFull = dialogView.findViewById(R.id.text_ocr_full);
-        MaterialButton btnFullText = dialogView.findViewById(R.id.btn_ocr_full_text);
-        TextView linesHint = dialogView.findViewById(R.id.text_ocr_lines_hint);
-        android.widget.ListView listLines = dialogView.findViewById(R.id.list_ocr_lines);
+        List<String> lines = ocrResult.lines;
+        if (lines == null || lines.isEmpty()) {
+            lines = new ArrayList<>();
+            lines.add(ocrResult.fullText);
+        }
 
-        textFull.setText(fullText);
+        View dialogView = getLayoutInflater().inflate(R.layout.dialog_ocr_result, null);
+        TextView textFull = dialogView.findViewById(R.id.text_ocr_full);
+        MaterialButton btnUseText = dialogView.findViewById(R.id.btn_ocr_full_text);
+        ListView listLines = dialogView.findViewById(R.id.list_ocr_lines);
+
+        OcrLineAdapter adapter = new OcrLineAdapter(getLayoutInflater(), lines);
+        listLines.setAdapter(adapter);
+
+        Runnable refreshPreview = () -> {
+            String selected = adapter.selectedText();
+            boolean hasSelection = !selected.isEmpty();
+            textFull.setText(hasSelection ? selected : getString(R.string.ocr_selected_preview_empty));
+            btnUseText.setEnabled(hasSelection);
+        };
+        refreshPreview.run();
 
         AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle(R.string.ocr_result_title)
@@ -850,41 +867,93 @@ public class ScannerActivity extends AppCompatActivity {
                 .setNegativeButton(android.R.string.cancel, null)
                 .create();
 
-        View.OnClickListener useFullText = v -> {
+        listLines.setOnItemClickListener((parent, view, position, id) -> {
+            adapter.toggle(position);
+            refreshPreview.run();
+        });
+        btnUseText.setOnClickListener(v -> {
+            String selected = adapter.selectedText();
+            if (selected.isEmpty()) {
+                return;
+            }
             dialog.dismiss();
-            returnTitleText(fullText);
-        };
-        cardFullText.setOnClickListener(useFullText);
-        btnFullText.setOnClickListener(useFullText);
+            returnTitleText(selected);
+        });
 
-        List<String> lines = ocrResult.lines;
-        if (lines != null && lines.size() > 1) {
-            linesHint.setVisibility(View.VISIBLE);
-            listLines.setVisibility(View.VISIBLE);
-            listLines.setAdapter(new android.widget.ArrayAdapter<>(
-                    this,
-                    android.R.layout.simple_list_item_1,
-                    lines
-            ));
-            listLines.setOnItemClickListener((parent, view, position, id) -> {
-                dialog.dismiss();
-                returnTitleText(lines.get(position));
-            });
-
-            listLines.post(() -> {
-                int maxHeight = (int) (getResources().getDisplayMetrics().density * 220);
-                if (listLines.getHeight() > maxHeight) {
-                    ViewGroup.LayoutParams params = listLines.getLayoutParams();
-                    params.height = maxHeight;
-                    listLines.setLayoutParams(params);
-                }
-            });
-        } else {
-            linesHint.setVisibility(View.GONE);
-            listLines.setVisibility(View.GONE);
-        }
+        listLines.post(() -> {
+            int maxHeight = (int) (getResources().getDisplayMetrics().density * 240);
+            if (listLines.getHeight() > maxHeight) {
+                ViewGroup.LayoutParams params = listLines.getLayoutParams();
+                params.height = maxHeight;
+                listLines.setLayoutParams(params);
+            }
+        });
 
         dialog.show();
+    }
+
+    private static final class OcrLineAdapter extends BaseAdapter {
+        private final LayoutInflater inflater;
+        private final List<String> lines;
+        private final boolean[] checked;
+
+        OcrLineAdapter(LayoutInflater inflater, List<String> lines) {
+            this.inflater = inflater;
+            this.lines = lines;
+            this.checked = new boolean[lines.size()];
+        }
+
+        void toggle(int position) {
+            if (position < 0 || position >= checked.length) {
+                return;
+            }
+            checked[position] = !checked[position];
+            notifyDataSetChanged();
+        }
+
+        @NonNull
+        String selectedText() {
+            StringBuilder builder = new StringBuilder();
+            for (int i = 0; i < lines.size(); i++) {
+                if (!checked[i]) {
+                    continue;
+                }
+                if (builder.length() > 0) {
+                    builder.append(' ');
+                }
+                builder.append(lines.get(i));
+            }
+            return builder.toString();
+        }
+
+        @Override
+        public int getCount() {
+            return lines.size();
+        }
+
+        @Override
+        public String getItem(int position) {
+            return lines.get(position);
+        }
+
+        @Override
+        public long getItemId(int position) {
+            return position;
+        }
+
+        @Override
+        public View getView(int position, View convertView, ViewGroup parent) {
+            View view = convertView;
+            if (view == null) {
+                view = inflater.inflate(R.layout.item_ocr_line, parent, false);
+            }
+            CheckBox checkBox = view.findViewById(R.id.check_ocr_line);
+            TextView textView = view.findViewById(R.id.text_ocr_line);
+            textView.setText(lines.get(position));
+            checkBox.setChecked(checked[position]);
+            view.setActivated(checked[position]);
+            return view;
+        }
     }
 
     private void returnTitleText(String titleText) {

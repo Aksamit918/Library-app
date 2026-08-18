@@ -263,7 +263,7 @@ public final class OcrImagePrep {
                 maxInk = value;
             }
         }
-        int threshold = Math.max(Math.max(6, width / 45), maxInk / 10);
+        int threshold = Math.max(Math.max(4, width / 60), maxInk / 14);
 
         boolean inBand = false;
         int start = 0;
@@ -298,8 +298,8 @@ public final class OcrImagePrep {
             }
         }
 
-        int minH = Math.max(10, height / 80);
-        int maxH = Math.max(minH + 1, Math.round(height * 0.42f));
+        int minH = Math.max(8, height / 100);
+        int maxH = Math.max(minH + 1, Math.round(height * 0.78f));
         for (int[] range : merged) {
             int bandH = range[1] - range[0];
             if (bandH < minH || bandH > maxH) {
@@ -315,11 +315,18 @@ public final class OcrImagePrep {
             if (crop.height() > crop.width() * 0.55f && crop.height() > Math.max(40, height / 8)) {
                 continue;
             }
-            Bitmap bitmap = Bitmap.createBitmap(
-                    source, crop.left, crop.top, crop.width(), crop.height());
-            bands.add(new TextBand(bitmap, crop.top));
-            if (bands.size() >= 12) {
-                break;
+            List<Rect> columns = splitInkColumns(
+                    pixels, width, height, crop, darkBackground);
+            for (Rect column : columns) {
+                if (column.width() < 12 || column.height() < 8) {
+                    continue;
+                }
+                Bitmap bitmap = Bitmap.createBitmap(
+                        source, column.left, column.top, column.width(), column.height());
+                bands.add(new TextBand(bitmap, column.top));
+                if (bands.size() >= 20) {
+                    return bands;
+                }
             }
         }
         return bands;
@@ -354,6 +361,85 @@ public final class OcrImagePrep {
         int left = Math.max(0, minX - pad);
         int right = Math.min(width, maxX + 1 + pad);
         return new Rect(left, top, right, bottom);
+    }
+
+    @NonNull
+    private static List<Rect> splitInkColumns(int[] pixels,
+                                              int width,
+                                              int height,
+                                              @NonNull Rect crop,
+                                              boolean darkBackground) {
+        int[] projection = new int[crop.width()];
+        int maxInk = 1;
+        for (int y = crop.top; y < crop.bottom && y < height; y++) {
+            int row = y * width;
+            for (int x = crop.left; x < crop.right && x < width; x++) {
+                int color = pixels[row + x];
+                int r = (color >> 16) & 0xFF;
+                int g = (color >> 8) & 0xFF;
+                int b = color & 0xFF;
+                if (isInkPixel(r, g, b, darkBackground)) {
+                    int idx = x - crop.left;
+                    projection[idx]++;
+                    if (projection[idx] > maxInk) {
+                        maxInk = projection[idx];
+                    }
+                }
+            }
+        }
+        int threshold = Math.max(2, Math.min(crop.height() / 10, maxInk / 6));
+        int minGap = Math.max(10, crop.height() / 4);
+        List<int[]> ranges = new ArrayList<>();
+        boolean inCol = false;
+        int start = 0;
+        for (int x = 0; x < projection.length; x++) {
+            boolean ink = projection[x] >= threshold;
+            if (ink && !inCol) {
+                inCol = true;
+                start = x;
+            } else if (!ink && inCol) {
+                inCol = false;
+                ranges.add(new int[]{start, x});
+            }
+        }
+        if (inCol) {
+            ranges.add(new int[]{start, projection.length});
+        }
+
+        List<int[]> merged = new ArrayList<>();
+        for (int[] range : ranges) {
+            if (merged.isEmpty()) {
+                merged.add(range);
+                continue;
+            }
+            int[] prev = merged.get(merged.size() - 1);
+            int gap = range[0] - prev[1];
+            if (gap < minGap) {
+                prev[1] = range[1];
+            } else {
+                merged.add(range);
+            }
+        }
+
+        List<Rect> columns = new ArrayList<>();
+        if (merged.size() < 2) {
+            columns.add(crop);
+            return columns;
+        }
+        int pad = Math.max(3, crop.height() / 12);
+        for (int[] range : merged) {
+            if (range[1] - range[0] < 12) {
+                continue;
+            }
+            int left = Math.max(crop.left, crop.left + range[0] - pad);
+            int right = Math.min(crop.right, crop.left + range[1] + pad);
+            columns.add(new Rect(left, crop.top, right, crop.bottom));
+        }
+        if (columns.size() < 2) {
+            columns.clear();
+            columns.add(crop);
+        }
+        return columns;
     }
 
     public static void recycleQuietly(Bitmap bitmap, Bitmap original) {

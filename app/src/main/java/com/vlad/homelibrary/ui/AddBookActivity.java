@@ -13,6 +13,7 @@ import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.lifecycle.ViewModelProvider;
 
@@ -91,8 +92,7 @@ public class AddBookActivity extends AppCompatActivity {
             new ActivityResultContracts.GetContent(),
             resultUri -> {
                 if (resultUri != null) {
-                    imageAddCover.setImageURI(resultUri);
-                    selectedImagePath = copyImageToInternalStorage(resultUri);
+                    openCoverCrop(resultUri);
                 }
             }
     );
@@ -105,6 +105,13 @@ public class AddBookActivity extends AppCompatActivity {
                 }
 
                 android.content.Intent data = result.getData();
+                String coverPath = data.getStringExtra(ScannerActivity.EXTRA_COVER_IMAGE_PATH);
+                if (coverPath != null && !coverPath.isBlank()) {
+                    selectedImagePath = coverPath;
+                    imageAddCover.setImageURI(android.net.Uri.fromFile(new java.io.File(coverPath)));
+                    return;
+                }
+
                 String typeName = data.getStringExtra(ScanResultParser.EXTRA_SCANNED_TYPE);
                 String value = data.getStringExtra(ScanResultParser.EXTRA_SCANNED_VALUE);
                 if (value == null || value.isBlank()) {
@@ -184,7 +191,10 @@ public class AddBookActivity extends AppCompatActivity {
         });
 
         btnSave.setOnClickListener(v -> saveBook());
-        imageAddCover.setOnClickListener(v -> photoPickerLauncher.launch("image/*"));
+        imageAddCover.setOnClickListener(v -> showCoverSourceChooser());
+        View cardCover = findViewById(R.id.card_cover);
+        cardCover.setOnClickListener(v -> showCoverSourceChooser());
+        ViewAnimator.applyPressAnimation(cardCover);
         layoutIsbn.setEndIconOnClickListener(v -> {
             pendingOcrTarget = null;
             openScanner(false);
@@ -309,6 +319,35 @@ public class AddBookActivity extends AppCompatActivity {
     private void openScanner(boolean startInOcrMode) {
         android.content.Intent intent = new android.content.Intent(this, ScannerActivity.class);
         intent.putExtra(ScannerActivity.EXTRA_START_OCR_MODE, startInOcrMode);
+        scannerLauncher.launch(intent);
+    }
+
+    private void showCoverSourceChooser() {
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.choose_cover_source)
+                .setItems(new CharSequence[]{
+                        getString(R.string.take_cover_photo),
+                        getString(R.string.choose_cover_gallery)
+                }, (dialog, which) -> {
+                    if (which == 0) {
+                        openCoverScanner();
+                    } else {
+                        photoPickerLauncher.launch("image/*");
+                    }
+                })
+                .show();
+    }
+
+    private void openCoverScanner() {
+        android.content.Intent intent = new android.content.Intent(this, ScannerActivity.class);
+        intent.putExtra(ScannerActivity.EXTRA_START_COVER_MODE, true);
+        scannerLauncher.launch(intent);
+    }
+
+    private void openCoverCrop(android.net.Uri uri) {
+        android.content.Intent intent = new android.content.Intent(this, ScannerActivity.class);
+        intent.putExtra(ScannerActivity.EXTRA_START_COVER_MODE, true);
+        intent.putExtra(ScannerActivity.EXTRA_COVER_SOURCE_URI, uri.toString());
         scannerLauncher.launch(intent);
     }
 
@@ -685,27 +724,5 @@ public class AddBookActivity extends AppCompatActivity {
     private static String textOrNull(EditText editText) {
         String value = editText.getText().toString().trim();
         return value.isEmpty() ? null : value;
-    }
-
-    private String copyImageToInternalStorage(android.net.Uri uri) {
-        try {
-            String fileName = "book_cover_" + System.currentTimeMillis() + ".jpg";
-            java.io.File directory = new java.io.File(getFilesDir(), "covers");
-            if (!directory.exists()) directory.mkdirs();
-            java.io.File file = new java.io.File(directory, fileName);
-            java.io.InputStream inputStream = getContentResolver().openInputStream(uri);
-            java.io.OutputStream outputStream = new java.io.FileOutputStream(file);
-            byte[] buffer = new byte[1024];
-            int length;
-            while ((length = inputStream.read(buffer)) > 0) {
-                outputStream.write(buffer, 0, length);
-            }
-            outputStream.close();
-            inputStream.close();
-            return file.getAbsolutePath();
-        } catch (Exception e) {
-            e.printStackTrace();
-            return "";
-        }
     }
 }

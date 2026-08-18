@@ -7,11 +7,13 @@ import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Matrix;
+import android.net.Uri;
 import android.os.Bundle;
 import android.util.Size;
 import android.util.TypedValue;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -45,12 +47,17 @@ import com.google.mlkit.vision.barcode.common.Barcode;
 import com.google.mlkit.vision.common.InputImage;
 import com.vlad.homelibrary.R;
 import com.vlad.homelibrary.data.LibraryDatabase;
+import com.vlad.homelibrary.scan.BookCoverDetector;
+import com.vlad.homelibrary.scan.CoverCropView;
+import com.vlad.homelibrary.scan.CoverImageLoader;
 import com.vlad.homelibrary.scan.MultilingualOcrEngine;
 import com.vlad.homelibrary.scan.OcrScriptChoice;
 import com.vlad.homelibrary.scan.PhotoLassoView;
 import com.vlad.homelibrary.scan.ScanResultParser;
 import com.vlad.homelibrary.scan.ScanZoneHelper;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -58,16 +65,23 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class ScannerActivity extends AppCompatActivity {
 
     public static final String EXTRA_START_OCR_MODE = "extra_start_ocr_mode";
+    public static final String EXTRA_START_COVER_MODE = "extra_start_cover_mode";
+    public static final String EXTRA_COVER_SOURCE_URI = "extra_cover_source_uri";
+    public static final String EXTRA_COVER_IMAGE_PATH = "extra_cover_image_path";
     private static final String PREFS_OCR = "ocr_prefs";
     private static final String PREF_SCRIPT = "ocr_script_choice";
 
     private PreviewView previewView;
     private PhotoLassoView photoLassoView;
+    private CoverCropView coverCropView;
     private MaterialCardView scannerFrame;
     private TextView textScanHint;
     private MaterialButton btnTakePhoto;
     private MaterialButton btnRetakePhoto;
     private MaterialButton btnOcrScript;
+    private LinearLayout barCoverCropActions;
+    private MaterialButton btnCoverRetake;
+    private MaterialButton btnUseCover;
     private ProgressBar progressScan;
 
     private ProcessCameraProvider cameraProvider;
@@ -77,8 +91,12 @@ public class ScannerActivity extends AppCompatActivity {
     private final AtomicBoolean barcodeHandled = new AtomicBoolean(false);
 
     private boolean ocrMode = false;
+    private boolean coverMode = false;
     private boolean selectingOnPhoto = false;
+    private boolean croppingCover = false;
+    private boolean coverFromCamera = false;
     private boolean ocrBusy = false;
+    private boolean coverBusy = false;
     private boolean capturingPhoto = false;
     @NonNull
     private OcrScriptChoice selectedScript = OcrScriptChoice.CYRILLIC;
@@ -104,11 +122,15 @@ public class ScannerActivity extends AppCompatActivity {
 
         previewView = findViewById(R.id.preview_view);
         photoLassoView = findViewById(R.id.photo_lasso_view);
+        coverCropView = findViewById(R.id.cover_crop_view);
         scannerFrame = findViewById(R.id.card_scanner_frame);
         textScanHint = findViewById(R.id.text_scan_hint);
         btnTakePhoto = findViewById(R.id.btn_take_photo);
         btnRetakePhoto = findViewById(R.id.btn_retake_photo);
         btnOcrScript = findViewById(R.id.btn_ocr_script);
+        barCoverCropActions = findViewById(R.id.bar_cover_crop_actions);
+        btnCoverRetake = findViewById(R.id.btn_cover_retake);
+        btnUseCover = findViewById(R.id.btn_use_cover);
         progressScan = findViewById(R.id.progress_scan);
 
         selectedScript = loadScriptChoice();
@@ -120,8 +142,10 @@ public class ScannerActivity extends AppCompatActivity {
                 .build();
         barcodeScanner = BarcodeScanning.getClient(options);
 
-        btnTakePhoto.setOnClickListener(v -> takeOcrPhoto());
+        btnTakePhoto.setOnClickListener(v -> takePhoto());
         btnRetakePhoto.setOnClickListener(v -> returnToPhotoCapture());
+        btnCoverRetake.setOnClickListener(v -> returnToCoverCapture());
+        btnUseCover.setOnClickListener(v -> approveCoverCrop());
 
         photoLassoView.setSelectionListener(new PhotoLassoView.SelectionListener() {
             @Override
@@ -138,7 +162,14 @@ public class ScannerActivity extends AppCompatActivity {
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
             public void handleOnBackPressed() {
-                if (ocrMode && selectingOnPhoto && !ocrBusy) {
+                if (coverMode && croppingCover && !coverBusy) {
+                    if (coverFromCamera) {
+                        returnToCoverCapture();
+                    } else {
+                        setEnabled(false);
+                        getOnBackPressedDispatcher().onBackPressed();
+                    }
+                } else if (ocrMode && selectingOnPhoto && !ocrBusy) {
                     returnToPhotoCapture();
                 } else {
                     setEnabled(false);
@@ -147,7 +178,17 @@ public class ScannerActivity extends AppCompatActivity {
             }
         });
 
-        setOcrMode(getIntent().getBooleanExtra(EXTRA_START_OCR_MODE, false));
+        coverMode = getIntent().getBooleanExtra(EXTRA_START_COVER_MODE, false);
+        String coverSource = getIntent().getStringExtra(EXTRA_COVER_SOURCE_URI);
+        if (coverMode) {
+            applyCoverCaptureUi();
+            if (coverSource != null && !coverSource.isBlank()) {
+                loadCoverFromUri(Uri.parse(coverSource));
+                return;
+            }
+        } else {
+            setOcrMode(getIntent().getBooleanExtra(EXTRA_START_OCR_MODE, false));
+        }
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
                 == PackageManager.PERMISSION_GRANTED) {
@@ -215,11 +256,15 @@ public class ScannerActivity extends AppCompatActivity {
             btnRetakePhoto.setVisibility(View.GONE);
             btnOcrScript.setVisibility(View.VISIBLE);
             textScanHint.setText(R.string.take_photo_of_text);
+            coverCropView.setVisibility(View.GONE);
+            barCoverCropActions.setVisibility(View.GONE);
         } else {
             photoLassoView.setVisibility(View.GONE);
             photoLassoView.setDrawingEnabled(false);
             photoLassoView.clearSelection();
             photoLassoView.clearPhoto();
+            coverCropView.setVisibility(View.GONE);
+            barCoverCropActions.setVisibility(View.GONE);
             btnTakePhoto.setVisibility(View.GONE);
             btnRetakePhoto.setVisibility(View.GONE);
             btnOcrScript.setVisibility(View.GONE);
@@ -230,6 +275,30 @@ public class ScannerActivity extends AppCompatActivity {
             params.height = dp(140);
             scannerFrame.setLayoutParams(params);
         }
+    }
+
+    private void applyCoverCaptureUi() {
+        coverMode = true;
+        croppingCover = false;
+        coverFromCamera = false;
+        barcodeHandled.set(true);
+
+        photoLassoView.setVisibility(View.GONE);
+        photoLassoView.setDrawingEnabled(false);
+        coverCropView.setVisibility(View.GONE);
+        coverCropView.setAdjustEnabled(false);
+        barCoverCropActions.setVisibility(View.GONE);
+        btnOcrScript.setVisibility(View.GONE);
+        btnRetakePhoto.setVisibility(View.GONE);
+        btnTakePhoto.setVisibility(View.VISIBLE);
+        previewView.setVisibility(View.VISIBLE);
+
+        scannerFrame.setVisibility(View.VISIBLE);
+        ViewGroup.LayoutParams params = scannerFrame.getLayoutParams();
+        params.width = dp(220);
+        params.height = dp(300);
+        scannerFrame.setLayoutParams(params);
+        textScanHint.setText(R.string.take_photo_of_cover);
     }
 
     private int dp(int value) {
@@ -256,7 +325,7 @@ public class ScannerActivity extends AppCompatActivity {
     }
 
     private void bindCameraUseCases() {
-        if (cameraProvider == null || selectingOnPhoto) {
+        if (cameraProvider == null || selectingOnPhoto || croppingCover) {
             return;
         }
 
@@ -265,7 +334,7 @@ public class ScannerActivity extends AppCompatActivity {
 
         cameraProvider.unbindAll();
 
-        if (ocrMode) {
+        if (ocrMode || coverMode) {
             int rotation = previewView.getDisplay() != null
                     ? previewView.getDisplay().getRotation()
                     : android.view.Surface.ROTATION_0;
@@ -293,7 +362,7 @@ public class ScannerActivity extends AppCompatActivity {
                 .build();
 
         imageAnalysis.setAnalyzer(ContextCompat.getMainExecutor(this), imageProxy -> {
-            if (ocrMode || barcodeHandled.get()) {
+            if (ocrMode || coverMode || barcodeHandled.get()) {
                 imageProxy.close();
                 return;
             }
@@ -312,7 +381,7 @@ public class ScannerActivity extends AppCompatActivity {
 
             barcodeScanner.process(image)
                     .addOnSuccessListener(barcodes -> {
-                        if (ocrMode || barcodeHandled.get()) {
+                        if (ocrMode || coverMode || barcodeHandled.get()) {
                             return;
                         }
                         for (Barcode barcode : barcodes) {
@@ -346,8 +415,8 @@ public class ScannerActivity extends AppCompatActivity {
         );
     }
 
-    private void takeOcrPhoto() {
-        if (!ocrMode || capturingPhoto || ocrBusy || imageCapture == null) {
+    private void takePhoto() {
+        if ((!ocrMode && !coverMode) || capturingPhoto || ocrBusy || coverBusy || imageCapture == null) {
             return;
         }
 
@@ -371,7 +440,11 @@ public class ScannerActivity extends AppCompatActivity {
                                 Toast.makeText(ScannerActivity.this, R.string.ocr_capture_failed, Toast.LENGTH_SHORT).show();
                                 return;
                             }
-                            enterPhotoSelection(bitmap);
+                            if (coverMode) {
+                                enterCoverCrop(bitmap, true);
+                            } else {
+                                enterPhotoSelection(bitmap);
+                            }
                         });
                     }
 
@@ -498,8 +571,179 @@ public class ScannerActivity extends AppCompatActivity {
         bindCameraUseCases();
     }
 
+    private void loadCoverFromUri(@NonNull Uri uri) {
+        coverFromCamera = false;
+        croppingCover = true;
+        previewView.setVisibility(View.GONE);
+        scannerFrame.setVisibility(View.GONE);
+        btnTakePhoto.setVisibility(View.GONE);
+        btnOcrScript.setVisibility(View.GONE);
+        barCoverCropActions.setVisibility(View.GONE);
+        progressScan.setVisibility(View.VISIBLE);
+        textScanHint.setText(R.string.finding_cover_edges);
+
+        LibraryDatabase.databaseWriteExecutor.execute(() -> {
+            Bitmap bitmap = CoverImageLoader.load(this, uri);
+            runOnUiThread(() -> {
+                if (isDestroyed()) {
+                    recycleQuietly(bitmap);
+                    return;
+                }
+                if (bitmap == null) {
+                    progressScan.setVisibility(View.GONE);
+                    Toast.makeText(this, R.string.cover_crop_failed, Toast.LENGTH_SHORT).show();
+                    finish();
+                    return;
+                }
+                enterCoverCrop(bitmap, false);
+            });
+        });
+    }
+
+    private void enterCoverCrop(@NonNull Bitmap photo, boolean fromCamera) {
+        clearCapturedPhoto();
+        capturedPhoto = photo;
+        coverFromCamera = fromCamera;
+        croppingCover = true;
+
+        if (cameraProvider != null) {
+            cameraProvider.unbindAll();
+        }
+
+        previewView.setVisibility(View.GONE);
+        scannerFrame.setVisibility(View.GONE);
+        btnTakePhoto.setVisibility(View.GONE);
+        btnRetakePhoto.setVisibility(View.GONE);
+        btnOcrScript.setVisibility(View.GONE);
+        photoLassoView.setVisibility(View.GONE);
+
+        coverCropView.setVisibility(View.VISIBLE);
+        coverCropView.setPhoto(photo);
+        coverCropView.setAdjustEnabled(false);
+        barCoverCropActions.setVisibility(View.VISIBLE);
+        btnCoverRetake.setVisibility(fromCamera ? View.VISIBLE : View.GONE);
+        btnCoverRetake.setEnabled(false);
+        btnUseCover.setEnabled(false);
+        progressScan.setVisibility(View.VISIBLE);
+        textScanHint.setText(R.string.finding_cover_edges);
+
+        coverBusy = true;
+        detectCoverEdges(photo);
+    }
+
+    private void detectCoverEdges(@NonNull Bitmap photo) {
+        LibraryDatabase.databaseWriteExecutor.execute(() -> {
+            float[] quad = BookCoverDetector.detect(photo);
+            runOnUiThread(() -> {
+                if (isDestroyed() || !croppingCover || capturedPhoto != photo) {
+                    return;
+                }
+                coverCropView.setBitmapQuad(quad);
+                coverCropView.setAdjustEnabled(true);
+                coverBusy = false;
+                progressScan.setVisibility(View.GONE);
+                btnUseCover.setEnabled(true);
+                btnCoverRetake.setEnabled(true);
+                textScanHint.setText(R.string.adjust_cover_edges);
+            });
+        });
+    }
+
+    private void returnToCoverCapture() {
+        if (coverBusy) {
+            return;
+        }
+
+        croppingCover = false;
+        coverFromCamera = false;
+        clearCapturedPhoto();
+        coverCropView.setAdjustEnabled(false);
+        coverCropView.clearPhoto();
+        coverCropView.setVisibility(View.GONE);
+        barCoverCropActions.setVisibility(View.GONE);
+        progressScan.setVisibility(View.GONE);
+        applyCoverCaptureUi();
+        bindCameraUseCases();
+    }
+
+    private void approveCoverCrop() {
+        if (coverBusy || !croppingCover) {
+            return;
+        }
+
+        Bitmap cropped = coverCropView.cropSelected();
+        if (cropped == null) {
+            Toast.makeText(this, R.string.cover_crop_failed, Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        coverBusy = true;
+        coverCropView.setAdjustEnabled(false);
+        btnUseCover.setEnabled(false);
+        btnCoverRetake.setEnabled(false);
+        progressScan.setVisibility(View.VISIBLE);
+
+        LibraryDatabase.databaseWriteExecutor.execute(() -> {
+            String path = saveCoverBitmap(cropped);
+            recycleQuietly(cropped);
+            runOnUiThread(() -> {
+                coverBusy = false;
+                btnUseCover.setEnabled(true);
+                btnCoverRetake.setEnabled(true);
+                progressScan.setVisibility(View.GONE);
+                coverCropView.setAdjustEnabled(true);
+
+                if (path == null || path.isEmpty()) {
+                    Toast.makeText(this, R.string.cover_crop_failed, Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                returnCoverResult(path);
+            });
+        });
+    }
+
+    @Nullable
+    private String saveCoverBitmap(@NonNull Bitmap bitmap) {
+        FileOutputStream output = null;
+        try {
+            File directory = new File(getFilesDir(), "covers");
+            if (!directory.exists() && !directory.mkdirs()) {
+                return null;
+            }
+            File file = new File(directory, "book_cover_" + System.currentTimeMillis() + ".jpg");
+            output = new FileOutputStream(file);
+            if (!bitmap.compress(Bitmap.CompressFormat.JPEG, 90, output)) {
+                return null;
+            }
+            output.flush();
+            return file.getAbsolutePath();
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        } finally {
+            if (output != null) {
+                try {
+                    output.close();
+                } catch (Exception ignored) {
+                }
+            }
+        }
+    }
+
+    private void returnCoverResult(@NonNull String path) {
+        clearCapturedPhoto();
+        Intent returnIntent = new Intent();
+        returnIntent.putExtra(EXTRA_COVER_IMAGE_PATH, path);
+        setResult(RESULT_OK, returnIntent);
+        if (cameraProvider != null) {
+            cameraProvider.unbindAll();
+        }
+        finish();
+    }
+
     private void clearCapturedPhoto() {
         photoLassoView.clearPhoto();
+        coverCropView.clearPhoto();
         if (capturedPhoto != null && !capturedPhoto.isRecycled()) {
             capturedPhoto.recycle();
         }

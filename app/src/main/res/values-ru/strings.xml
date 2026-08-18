@@ -102,4 +102,12 @@
     <string name="ocr_pick_single_line">Выбрать одну строку</string>
     <string name="ocr_full_text_hint">Нажмите кнопку, чтобы взять весь текст</string>
     <string name="ocr_or_pick_line">Или нажмите одну строку</string>
+    <string name="take_photo_of_cover">Сфотографируйте обложку книги</string>
+    <string name="adjust_cover_edges">Потяните пунктирные края, чтобы подогнать обложку, затем подтвердите</string>
+    <string name="finding_cover_edges">Ищем края обложки…</string>
+    <string name="use_cover">Использовать обложку</string>
+    <string name="cover_crop_failed">Не удалось сохранить обложку</string>
+    <string name="choose_cover_source">Обложка книги</string>
+    <string name="take_cover_photo">Сделать фото</string>
+    <string name="choose_cover_gallery">Выбрать из галереи</string>
 </resources>

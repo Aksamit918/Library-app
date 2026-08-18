@@ -102,4 +102,12 @@
     <string name="ocr_pick_single_line">Выбраць адзін радок</string>
     <string name="ocr_full_text_hint">Націсніце кнопку, каб узяць увесь тэкст</string>
     <string name="ocr_or_pick_line">Або націсніце адзін радок</string>
+    <string name="take_photo_of_cover">Сфатаграфуйце вокладку кнігі</string>
+    <string name="adjust_cover_edges">Пацягніце пункцірныя краі, каб падганіць вокладку, затым пацвердзіце</string>
+    <string name="finding_cover_edges">Шукаем краі вокладкі…</string>
+    <string name="use_cover">Выкарыстаць вокладку</string>
+    <string name="cover_crop_failed">Не ўдалося захаваць вокладку</string>
+    <string name="choose_cover_source">Вокладка кнігі</string>
+    <string name="take_cover_photo">Зрабіць фота</string>
+    <string name="choose_cover_gallery">Выбраць з галерэі</string>
 </resources>

@@ -231,4 +231,7 @@
     <string name="choose_cover_source">Обложка книги</string>
     <string name="take_cover_photo">Сделать фото</string>
     <string name="choose_cover_gallery">Выбрать из галереи</string>
+    <string name="change_language">Сменить язык</string>
+    <string name="choose_app_language">Язык приложения</string>
+    <string name="locale_system_default">Как в системе</string>
 </resources>

@@ -231,4 +231,7 @@
     <string name="choose_cover_source">Cubierta del libro</string>
     <string name="take_cover_photo">Tomar foto</string>
     <string name="choose_cover_gallery">Elegir de la galería</string>
+    <string name="change_language">Cambiar idioma</string>
+    <string name="choose_app_language">Idioma de la aplicación</string>
+    <string name="locale_system_default">Predeterminado del sistema</string>
 </resources>

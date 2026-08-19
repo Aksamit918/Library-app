@@ -6,9 +6,11 @@ import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.View;
 import android.widget.EditText;
+import android.widget.ImageButton;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.ViewModelProvider;
@@ -51,6 +53,10 @@ public class MainActivity extends AppCompatActivity {
             startActivity(intent);
         });
 
+        ImageButton languageButton = findViewById(R.id.button_language);
+        ViewAnimator.applyPressAnimation(languageButton);
+        languageButton.setOnClickListener(v -> showLanguagePicker());
+
         com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton fab = findViewById(R.id.fab_add_book);
         ViewAnimator.applyPressAnimation(fab);
         fab.setOnClickListener(v -> startActivity(new Intent(MainActivity.this, AddBookActivity.class)));
@@ -92,6 +98,24 @@ public class MainActivity extends AppCompatActivity {
         });
 
         setupSwipeToDelete(recyclerView);
+    }
+
+    private void showLanguagePicker() {
+        AppLocale.Option[] options = AppLocale.options();
+        CharSequence[] labels = new CharSequence[options.length];
+        for (int i = 0; i < options.length; i++) {
+            labels[i] = getString(options[i].labelRes);
+        }
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.choose_app_language)
+                .setSingleChoiceItems(labels, AppLocale.selectedIndex(), (dialog, which) -> {
+                    if (!options[which].tag.equals(AppLocale.currentTag())) {
+                        AppLocale.apply(options[which].tag);
+                    }
+                    dialog.dismiss();
+                })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
     }
 
     private void observeData(LiveData<List<BookAndAuthor>> newLiveData) {

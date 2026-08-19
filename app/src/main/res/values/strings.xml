@@ -230,4 +230,11 @@
     <string name="choose_cover_source">Book cover</string>
     <string name="take_cover_photo">Take photo</string>
     <string name="choose_cover_gallery">Choose from gallery</string>
+    <string name="change_language">Change language</string>
+    <string name="choose_app_language">App language</string>
+    <string name="locale_system_default">System default</string>
+    <string name="locale_english" translatable="false">English</string>
+    <string name="locale_spanish" translatable="false">Español</string>
+    <string name="locale_russian" translatable="false">Русский</string>
+    <string name="locale_belarusian" translatable="false">Беларуская</string>
 </resources>

@@ -6,9 +6,11 @@ import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.View;
 import android.widget.EditText;
+import android.widget.ImageButton;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.ViewModelProvider;
@@ -16,7 +18,6 @@ import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.textfield.TextInputLayout;
 import com.vlad.homelibrary.adapter.BookAdapter;
 import com.vlad.homelibrary.data.BookAndAuthor;
@@ -48,20 +49,13 @@ public class MainActivity extends AppCompatActivity {
 
         adapter.setOnItemClickListener(bookAndAuthor -> {
             Intent intent = new Intent(MainActivity.this, AddBookActivity.class);
-
             intent.putExtra("EXTRA_ID", bookAndAuthor.book.getId());
-            intent.putExtra("EXTRA_TITLE", bookAndAuthor.book.getTitle());
-            intent.putExtra("EXTRA_AUTHOR", bookAndAuthor.author.getName());
-            intent.putExtra("EXTRA_ISBN", bookAndAuthor.book.getIsbn());
-            intent.putExtra("EXTRA_IMAGE_URI", bookAndAuthor.book.getCoverImageUri());
-
-
-            if (bookAndAuthor.book.getPageCount() != null && bookAndAuthor.book.getPageCount() > 0) {
-                intent.putExtra("EXTRA_PAGES", bookAndAuthor.book.getPageCount());
-            }
-
             startActivity(intent);
         });
+
+        ImageButton languageButton = findViewById(R.id.button_language);
+        ViewAnimator.applyPressAnimation(languageButton);
+        languageButton.setOnClickListener(v -> showLanguagePicker());
 
         com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton fab = findViewById(R.id.fab_add_book);
         ViewAnimator.applyPressAnimation(fab);
@@ -104,6 +98,24 @@ public class MainActivity extends AppCompatActivity {
         });
 
         setupSwipeToDelete(recyclerView);
+    }
+
+    private void showLanguagePicker() {
+        AppLocale.Option[] options = AppLocale.options();
+        CharSequence[] labels = new CharSequence[options.length];
+        for (int i = 0; i < options.length; i++) {
+            labels[i] = getString(options[i].labelRes);
+        }
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.choose_app_language)
+                .setSingleChoiceItems(labels, AppLocale.selectedIndex(), (dialog, which) -> {
+                    if (!options[which].tag.equals(AppLocale.currentTag())) {
+                        AppLocale.apply(options[which].tag);
+                    }
+                    dialog.dismiss();
+                })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
     }
 
     private void observeData(LiveData<List<BookAndAuthor>> newLiveData) {

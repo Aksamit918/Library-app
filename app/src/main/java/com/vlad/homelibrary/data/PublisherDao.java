@@ -21,6 +21,9 @@ public interface PublisherDao {
     @Query("SELECT * FROM publishers WHERE id = :publisherId")
     LiveData<Publisher> getPublisherById(long publisherId);
 
+    @Query("SELECT * FROM publishers WHERE id = :publisherId LIMIT 1")
+    Publisher getPublisherByIdSync(long publisherId);
+
     @Query("SELECT * FROM publishers WHERE name = :name LIMIT 1")
     Publisher getPublisherByNameSync(String name);
 

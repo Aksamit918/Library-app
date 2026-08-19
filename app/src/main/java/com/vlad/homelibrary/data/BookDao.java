@@ -36,7 +36,7 @@ public interface BookDao {
     int checkIsbnExists(String isbn, long currentBookId);
 
     @androidx.room.Transaction
-    @Query("SELECT books.* FROM books INNER JOIN authors ON books.author_id = authors.id " +
+    @Query("SELECT books.* FROM books LEFT JOIN authors ON books.author_id = authors.id " +
             "WHERE books.title LIKE '%' || :searchQuery || '%' " +
             "OR books.isbn LIKE '%' || :searchQuery || '%' " +
             "OR authors.name LIKE '%' || :searchQuery || '%' " +
@@ -44,7 +44,7 @@ public interface BookDao {
     LiveData<List<BookAndAuthor>> searchBooksAndAuthors(String searchQuery);
 
     @androidx.room.Transaction
-    @Query("SELECT books.* FROM books INNER JOIN authors ON books.author_id = authors.id WHERE books.title LIKE '%' || :searchQuery || '%' ORDER BY books.title ASC")
+    @Query("SELECT books.* FROM books LEFT JOIN authors ON books.author_id = authors.id WHERE books.title LIKE '%' || :searchQuery || '%' ORDER BY books.title ASC")
     LiveData<List<BookAndAuthor>> searchByTitle(String searchQuery);
 
     @androidx.room.Transaction
@@ -52,7 +52,7 @@ public interface BookDao {
     LiveData<List<BookAndAuthor>> searchByAuthor(String searchQuery);
 
     @androidx.room.Transaction
-    @Query("SELECT books.* FROM books INNER JOIN authors ON books.author_id = authors.id WHERE books.isbn LIKE '%' || :searchQuery || '%' ORDER BY books.title ASC")
+    @Query("SELECT books.* FROM books LEFT JOIN authors ON books.author_id = authors.id WHERE books.isbn LIKE '%' || :searchQuery || '%' ORDER BY books.title ASC")
     LiveData<List<BookAndAuthor>> searchByIsbn(String searchQuery);
 
     @Update

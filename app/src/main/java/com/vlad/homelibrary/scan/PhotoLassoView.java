@@ -15,6 +15,7 @@ import android.util.TypedValue;
 import android.view.MotionEvent;
 import android.view.View;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 public class PhotoLassoView extends View {
@@ -194,8 +195,15 @@ public class PhotoLassoView extends View {
                 }
                 return true;
 
-            case MotionEvent.ACTION_UP:
             case MotionEvent.ACTION_CANCEL:
+                if (!isDrawing) {
+                    return false;
+                }
+                isDrawing = false;
+                clearSelection();
+                return true;
+
+            case MotionEvent.ACTION_UP:
                 if (!isDrawing) {
                     return false;
                 }
@@ -245,9 +253,6 @@ public class PhotoLassoView extends View {
         if (bitmapBounds.isEmpty()) {
             return null;
         }
-
-        float edgePad = Math.max(4f, Math.min(bitmapBounds.width(), bitmapBounds.height()) * 0.02f);
-        bitmapBounds.inset(-edgePad, -edgePad);
         if (!bitmapBounds.intersect(0, 0, photo.getWidth(), photo.getHeight())) {
             return null;
         }
@@ -265,30 +270,56 @@ public class PhotoLassoView extends View {
             return null;
         }
 
-        Path maskPath = expandPath(bitmapPath, Math.max(3f, edgePad));
+        Path maskPath = new Path(bitmapPath);
+        maskPath.setFillType(Path.FillType.WINDING);
         maskPath.offset(-left, -top);
 
-        Bitmap masked = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
-        Canvas canvas = new Canvas(masked);
-        canvas.drawColor(Color.WHITE);
-        int save = canvas.save();
-        canvas.clipPath(maskPath);
-        canvas.drawBitmap(photo, -left, -top, imagePaint);
-        canvas.restoreToCount(save);
-        return masked;
+        Bitmap cropped = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+        Canvas photoCanvas = new Canvas(cropped);
+        photoCanvas.drawBitmap(photo, -left, -top, imagePaint);
+
+        Bitmap mask = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+        Canvas maskCanvas = new Canvas(mask);
+        Paint fillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        fillPaint.setStyle(Paint.Style.FILL);
+        fillPaint.setColor(Color.WHITE);
+        maskCanvas.drawPath(maskPath, fillPaint);
+        boolean maskUsable = maskCoverage(mask) >= 0.18f;
+        if (maskUsable) {
+            Paint dstIn = new Paint();
+            dstIn.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.DST_IN));
+            photoCanvas.drawBitmap(mask, 0, 0, dstIn);
+            photoCanvas.drawColor(Color.WHITE, PorterDuff.Mode.DST_OVER);
+        }
+        mask.recycle();
+
+        int pad = 16;
+        Bitmap padded = Bitmap.createBitmap(width + pad * 2, height + pad * 2, Bitmap.Config.ARGB_8888);
+        Canvas out = new Canvas(padded);
+        out.drawColor(Color.WHITE);
+        out.drawBitmap(cropped, pad, pad, imagePaint);
+        cropped.recycle();
+        return padded;
     }
 
-    private static Path expandPath(Path source, float expandPx) {
-        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        paint.setStyle(Paint.Style.FILL_AND_STROKE);
-        paint.setStrokeWidth(expandPx * 2f);
-        paint.setStrokeJoin(Paint.Join.ROUND);
-        paint.setStrokeCap(Paint.Cap.ROUND);
-        Path expanded = new Path();
-        if (!paint.getFillPath(source, expanded)) {
-            expanded.set(source);
+    private static float maskCoverage(@NonNull Bitmap mask) {
+        int width = mask.getWidth();
+        int height = mask.getHeight();
+        int stepX = Math.max(1, width / 80);
+        int stepY = Math.max(1, height / 80);
+        int[] row = new int[width];
+        int opaque = 0;
+        int total = 0;
+        for (int y = 0; y < height; y += stepY) {
+            mask.getPixels(row, 0, width, 0, y, width, 1);
+            for (int x = 0; x < width; x += stepX) {
+                total++;
+                if ((row[x] >>> 24) > 120) {
+                    opaque++;
+                }
+            }
         }
-        return expanded;
+        return total == 0 ? 0f : opaque / (float) total;
     }
 
     private float dp(float value) {

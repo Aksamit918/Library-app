@@ -15,12 +15,47 @@ public class OcrTextNormalizerTest {
     @Test
     public void keepsNumbersAndInitials() {
         assertTrue(OcrTextNormalizer.isKeepableLine("5334"));
-        assertTrue(OcrTextNormalizer.isKeepableLine("42"));
+        assertTrue(OcrTextNormalizer.isKeepableLine("ТЕОРИЯ"));
+        assertTrue(OcrTextNormalizer.isKeepableLine("СЕЛЕКТИРУЮЩИХ"));
+        assertFalse(OcrTextNormalizer.isKeepableLine("140"));
+        assertFalse(OcrTextNormalizer.isKeepableLine("42"));
+        assertFalse(OcrTextNormalizer.isKeepableLine("21"));
         assertTrue(OcrTextNormalizer.isKeepableLine("A. I."));
         assertTrue(OcrTextNormalizer.isKeepableLine("А. И."));
         assertTrue(OcrTextNormalizer.isKeepableLine("X.X."));
         assertFalse(OcrTextNormalizer.isKeepableLine("A"));
         assertFalse(OcrTextNormalizer.isKeepableLine("8"));
+        assertFalse(OcrTextNormalizer.isKeepableLine("Aa 10002"));
+        assertFalse(OcrTextNormalizer.isKeepableLine("оо але Ноа"));
+        assertFalse(OcrTextNormalizer.isKeepableLine("OK EO HHTЛ"));
+        assertFalse(OcrTextNormalizer.isKeepableLine("ВИО: Ч ме то"));
+    }
+
+    @Test
+    public void stripsUnbalancedEdgePunctuation() {
+        assertEquals("ЗВОНИ", OcrTextNormalizer.cleanFragment("ЗВОНИ)"));
+        assertEquals("ВОДА 140", OcrTextNormalizer.cleanFragment("ВОДА 140)"));
+        assertEquals("ТЕОРИЯ", OcrTextNormalizer.cleanFragment("ТЕОРИЯ"));
+    }
+
+    @Test
+    public void dropsMathAndScriptNoise() {
+        assertTrue(OcrTextNormalizer.looksLikeMathNoise("χ(x, x_k) = 1"));
+        assertTrue(OcrTextNormalizer.looksLikeMathNoise("f(x1, x2)"));
+        assertFalse(OcrTextNormalizer.looksLikeMathNoise("ТЕОРИЯ СЕЛЕКТИРУЮЩИХ"));
+        assertFalse(OcrTextNormalizer.looksLikeMathNoise("В.А. МИЩЕНКО"));
+        assertTrue(OcrTextNormalizer.mismatchesChosenScript(
+                "sgn", OcrScriptChoice.Family.CYRILLIC));
+        assertFalse(OcrTextNormalizer.mismatchesChosenScript(
+                "ТЕОРИЯ", OcrScriptChoice.Family.CYRILLIC));
+    }
+
+    @Test
+    public void mergesNoisyDuplicateLines() {
+        List<String> lines = new ArrayList<>(Arrays.asList("СЕЛЕКТИРУЮЩИХ"));
+        assertTrue(OcrTextNormalizer.indexOfSimilar(lines, "СЕЛЕКТИРУЮЩИХ.") >= 0);
+        assertTrue(OcrTextNormalizer.indexOfSimilar(lines, "СЕЛЕКТИРУЮШИХ") >= 0);
+        assertEquals(-1, OcrTextNormalizer.indexOfSimilar(lines, "ФУНКЦИЙ"));
     }
 
     @Test

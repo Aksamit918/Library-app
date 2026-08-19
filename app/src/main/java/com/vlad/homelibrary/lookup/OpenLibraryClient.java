@@ -139,9 +139,8 @@ public class OpenLibraryClient {
             }
             return outputFile.getAbsolutePath();
         } catch (IOException e) {
-            if (outputFile.exists()) {
-                //noinspection ResultOfMethodCallIgnored
-                outputFile.delete();
+            if (outputFile.exists() && !outputFile.delete()) {
+                outputFile.deleteOnExit();
             }
             return null;
         }

@@ -9,13 +9,20 @@ import android.graphics.BitmapFactory;
 import android.graphics.Matrix;
 import android.net.Uri;
 import android.os.Bundle;
+import android.text.Editable;
+import android.text.TextWatcher;
+import android.util.DisplayMetrics;
 import android.util.Size;
 import android.util.TypedValue;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.Window;
+import android.view.WindowManager;
+import android.widget.ArrayAdapter;
 import android.widget.BaseAdapter;
 import android.widget.CheckBox;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.ProgressBar;
@@ -104,7 +111,7 @@ public class ScannerActivity extends AppCompatActivity {
     private boolean coverBusy = false;
     private boolean capturingPhoto = false;
     @NonNull
-    private OcrScriptChoice selectedScript = OcrScriptChoice.CYRILLIC;
+    private OcrScriptChoice selectedScript = OcrScriptChoice.RUS;
     @Nullable
     private Bitmap capturedPhoto;
 
@@ -140,7 +147,7 @@ public class ScannerActivity extends AppCompatActivity {
 
         selectedScript = loadScriptChoice();
         updateScriptButton();
-        btnOcrScript.setOnClickListener(v -> showScriptChooser());
+        btnOcrScript.setOnClickListener(v -> showLanguageChooser());
 
         BarcodeScannerOptions options = new BarcodeScannerOptions.Builder()
                 .setBarcodeFormats(Barcode.FORMAT_ALL_FORMATS)
@@ -206,10 +213,11 @@ public class ScannerActivity extends AppCompatActivity {
     @NonNull
     private OcrScriptChoice loadScriptChoice() {
         SharedPreferences prefs = getSharedPreferences(PREFS_OCR, MODE_PRIVATE);
-        if (!prefs.contains(PREF_SCRIPT)) {
-            return OcrScriptChoice.defaultForDeviceLocale();
+        String saved = prefs.getString(PREF_SCRIPT, null);
+        if (saved == null || saved.isEmpty() || OcrScriptChoice.isLegacyFamilyId(saved)) {
+            return OcrScriptChoice.defaultForAppLocale(this);
         }
-        return OcrScriptChoice.fromId(prefs.getString(PREF_SCRIPT, null));
+        return OcrScriptChoice.fromId(saved);
     }
 
     private void saveScriptChoice(@NonNull OcrScriptChoice choice) {
@@ -223,29 +231,83 @@ public class ScannerActivity extends AppCompatActivity {
         btnOcrScript.setText(selectedScript.labelRes);
     }
 
-    private void showScriptChooser() {
+    private void showLanguageChooser() {
         if (ocrBusy) {
             return;
         }
-        OcrScriptChoice[] choices = OcrScriptChoice.values();
-        CharSequence[] labels = new CharSequence[choices.length];
-        int checked = 0;
-        for (int i = 0; i < choices.length; i++) {
-            labels[i] = getString(choices[i].labelRes);
-            if (choices[i] == selectedScript) {
-                checked = i;
-            }
+        View content = getLayoutInflater().inflate(R.layout.dialog_ocr_language, null);
+        EditText search = content.findViewById(R.id.edit_ocr_language_search);
+        ListView list = content.findViewById(R.id.list_ocr_languages);
+        TextView empty = content.findViewById(R.id.text_ocr_language_empty);
+
+        List<OcrScriptChoice> all = OcrScriptChoice.allSortedByLabel(this);
+        List<String> englishNames = new ArrayList<>(all.size());
+        for (OcrScriptChoice choice : all) {
+            englishNames.add(choice.englishLabel(this));
         }
-        new AlertDialog.Builder(this)
-                .setTitle(R.string.ocr_choose_script_title)
-                .setSingleChoiceItems(labels, checked, (dialog, which) -> {
-                    selectedScript = choices[which];
-                    saveScriptChoice(selectedScript);
-                    updateScriptButton();
-                    dialog.dismiss();
-                })
+        List<OcrScriptChoice> visible = new ArrayList<>();
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(
+                this,
+                android.R.layout.simple_list_item_single_choice,
+                new ArrayList<>());
+        list.setAdapter(adapter);
+        list.setEmptyView(empty);
+
+        Runnable refresh = () -> {
+            String query = search.getText() == null ? "" : search.getText().toString();
+            visible.clear();
+            adapter.clear();
+            int checked = -1;
+            for (int i = 0; i < all.size(); i++) {
+                OcrScriptChoice choice = all.get(i);
+                String label = getString(choice.labelRes);
+                if (choice.matchesQuery(query, label, englishNames.get(i))) {
+                    if (choice == selectedScript) {
+                        checked = visible.size();
+                    }
+                    visible.add(choice);
+                    adapter.add(label);
+                }
+            }
+            adapter.notifyDataSetChanged();
+            if (checked >= 0) {
+                list.setItemChecked(checked, true);
+            }
+        };
+        refresh.run();
+        search.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+                refresh.run();
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+            }
+        });
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle(R.string.ocr_choose_language_title)
+                .setView(content)
                 .setNegativeButton(android.R.string.cancel, null)
-                .show();
+                .create();
+        list.setOnItemClickListener((parent, view, position, id) -> {
+            selectedScript = visible.get(position);
+            saveScriptChoice(selectedScript);
+            updateScriptButton();
+            dialog.dismiss();
+        });
+        dialog.show();
+        Window window = dialog.getWindow();
+        if (window != null) {
+            DisplayMetrics metrics = getResources().getDisplayMetrics();
+            window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, (int) (metrics.heightPixels * 0.75f));
+            window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        }
     }
 
     private void setOcrMode(boolean enabled) {

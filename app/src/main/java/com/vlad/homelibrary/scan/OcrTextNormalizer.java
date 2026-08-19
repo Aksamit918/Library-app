@@ -22,6 +22,8 @@ final class OcrTextNormalizer {
             "(?u)^(\\p{L}\\.\\s*){1,4}\\p{L}?\\.?$");
     private static final Pattern LEADING_JUNK = Pattern.compile("^[|_=\\-•·«»\"'“”]+");
     private static final Pattern TRAILING_JUNK = Pattern.compile("[|_=\\-•·«»\"'“”]+$");
+    private static final Pattern MATH_TOKEN = Pattern.compile(
+            "(?i)(sgn|chi|sin|cos|tan|log|exp)\\b|[χλφψ]|[_^=]");
 
     private OcrTextNormalizer() {
     }
@@ -81,7 +83,39 @@ final class OcrTextNormalizer {
         String cleaned = value.trim().replace('\u00A0', ' ');
         cleaned = LEADING_JUNK.matcher(cleaned).replaceAll("");
         cleaned = TRAILING_JUNK.matcher(cleaned).replaceAll("");
+        cleaned = stripUnbalancedEdges(cleaned);
         return cleaned.replaceAll("\\s+", " ").trim();
+    }
+
+    @NonNull
+    static String stripUnbalancedEdges(@Nullable String value) {
+        if (value == null || value.isEmpty()) {
+            return "";
+        }
+        String cleaned = value.trim();
+        while (cleaned.length() >= 2) {
+            char last = cleaned.charAt(cleaned.length() - 1);
+            if ((last == ')' && cleaned.indexOf('(') < 0)
+                    || (last == ']' && cleaned.indexOf('[') < 0)
+                    || (last == '}' && cleaned.indexOf('{') < 0)) {
+                cleaned = cleaned.substring(0, cleaned.length() - 1).trim();
+                continue;
+            }
+            char first = cleaned.charAt(0);
+            if ((first == '(' && cleaned.indexOf(')') < 0)
+                    || (first == '[' && cleaned.indexOf(']') < 0)
+                    || (first == '{' && cleaned.indexOf('}') < 0)) {
+                cleaned = cleaned.substring(1).trim();
+                continue;
+            }
+            break;
+        }
+        return cleaned;
+    }
+
+    @NonNull
+    static String cleanOcrLine(@Nullable String text) {
+        return normalizeAuthorInitials(text);
     }
 
     @NonNull
@@ -108,22 +142,162 @@ final class OcrTextNormalizer {
         if (cleaned == null || cleaned.isEmpty()) {
             return false;
         }
+        if (looksLikeMathNoise(cleaned) || isMixedScriptNoise(cleaned)) {
+            return false;
+        }
         if (looksLikeInitials(cleaned)) {
             return true;
         }
         int letters = countScript(cleaned, Character::isLetter);
         int digits = countScript(cleaned, Character::isDigit);
-        return letters >= 2 || digits >= 2 || letters + digits >= 3;
+        if (digits >= 4 && letters <= 1) {
+            return true;
+        }
+        return hasUsefulWord(cleaned);
+    }
+
+    static boolean hasUsefulWord(@Nullable String text) {
+        if (text == null || text.isEmpty()) {
+            return false;
+        }
+        int wordsGe5 = 0;
+        int wordsGe4 = 0;
+        int words = 0;
+        int currentLetters = 0;
+        for (int i = 0; i <= text.length(); ) {
+            boolean end = i >= text.length();
+            int cp = end ? ' ' : text.codePointAt(i);
+            if (!end && Character.isLetter(cp)) {
+                currentLetters++;
+                i += Character.charCount(cp);
+                continue;
+            }
+            if (currentLetters > 0) {
+                words++;
+                if (currentLetters >= 5) {
+                    wordsGe5++;
+                }
+                if (currentLetters >= 4) {
+                    wordsGe4++;
+                }
+                currentLetters = 0;
+            }
+            if (end) {
+                break;
+            }
+            i += Character.charCount(cp);
+        }
+        return wordsGe5 >= 1 || wordsGe4 >= 2 || (words == 1 && wordsGe4 == 1);
+    }
+
+    static boolean isMixedScriptNoise(@Nullable String text) {
+        if (text == null || text.isEmpty()) {
+            return false;
+        }
+        int cyrillic = 0;
+        int latin = 0;
+        for (int i = 0; i < text.length(); ) {
+            int cp = text.codePointAt(i);
+            if (Character.isLetter(cp)) {
+                Character.UnicodeBlock block = Character.UnicodeBlock.of(cp);
+                if (block == Character.UnicodeBlock.CYRILLIC
+                        || block == Character.UnicodeBlock.CYRILLIC_SUPPLEMENTARY) {
+                    cyrillic++;
+                } else if (block == Character.UnicodeBlock.BASIC_LATIN
+                        || block == Character.UnicodeBlock.LATIN_1_SUPPLEMENT
+                        || block == Character.UnicodeBlock.LATIN_EXTENDED_A
+                        || block == Character.UnicodeBlock.LATIN_EXTENDED_B) {
+                    latin++;
+                }
+            }
+            i += Character.charCount(cp);
+        }
+        return cyrillic >= 2 && latin >= 2;
+    }
+
+    static boolean looksLikeGibberish(@Nullable String text) {
+        if (text == null || text.isEmpty() || looksLikeInitials(text)) {
+            return false;
+        }
+        int letters = countScript(text, Character::isLetter);
+        int digits = countScript(text, Character::isDigit);
+        if (digits >= 4 && letters <= 1) {
+            return false;
+        }
+        return !hasUsefulWord(text);
+    }
+
+    static boolean looksLikeMathNoise(@Nullable String text) {
+        if (text == null || text.isEmpty()) {
+            return false;
+        }
+        if (MATH_TOKEN.matcher(text).find() && countScript(text, Character::isLetter) < 8) {
+            return true;
+        }
+        int letters = countScript(text, Character::isLetter);
+        int digits = countScript(text, Character::isDigit);
+        int ops = 0;
+        int parens = 0;
+        for (int i = 0; i < text.length(); ) {
+            int cp = text.codePointAt(i);
+            if (cp == '(' || cp == ')' || cp == '[' || cp == ']' || cp == '{' || cp == '}') {
+                parens++;
+            } else if (cp == '=' || cp == '+' || cp == '*' || cp == '/' || cp == '^'
+                    || cp == '_' || cp == '<' || cp == '>' || cp == '|' || cp == '\\'
+                    || cp == '×' || cp == '−') {
+                ops++;
+            }
+            i += Character.charCount(cp);
+        }
+        int alnum = letters + digits;
+        if (parens >= 2 && alnum < 6) {
+            return true;
+        }
+        return ops + parens >= 3 && alnum <= ops + parens + 3;
+    }
+
+    static boolean mismatchesChosenScript(@Nullable String text, @NonNull OcrScriptChoice.Family family) {
+        if (text == null || text.isEmpty() || isMostlyDigits(text) || looksLikeInitials(text)) {
+            return false;
+        }
+        int cyrillic = 0;
+        int latin = 0;
+        int otherLetters = 0;
+        for (int i = 0; i < text.length(); ) {
+            int cp = text.codePointAt(i);
+            if (Character.isLetter(cp)) {
+                Character.UnicodeBlock block = Character.UnicodeBlock.of(cp);
+                if (block == Character.UnicodeBlock.CYRILLIC
+                        || block == Character.UnicodeBlock.CYRILLIC_SUPPLEMENTARY) {
+                    cyrillic++;
+                } else if (block == Character.UnicodeBlock.BASIC_LATIN
+                        || block == Character.UnicodeBlock.LATIN_1_SUPPLEMENT
+                        || block == Character.UnicodeBlock.LATIN_EXTENDED_A
+                        || block == Character.UnicodeBlock.LATIN_EXTENDED_B) {
+                    latin++;
+                } else {
+                    otherLetters++;
+                }
+            }
+            i += Character.charCount(cp);
+        }
+        if (family == OcrScriptChoice.Family.CYRILLIC) {
+            return cyrillic == 0 && latin >= 2 && otherLetters == 0;
+        }
+        if (family == OcrScriptChoice.Family.LATIN) {
+            return latin == 0 && cyrillic >= 2 && otherLetters == 0;
+        }
+        return false;
     }
 
     static boolean isMostlyDigits(@Nullable String text) {
         String collapsed = collapseSpacedDigits(text);
         String digits = extractDigitRun(collapsed);
-        if (digits.length() < 2) {
+        if (digits.length() < 4) {
             return false;
         }
         int letters = countScript(collapsed, Character::isLetter);
-        return digits.length() >= Math.max(2, letters);
+        return letters <= 1;
     }
 
     @NonNull
@@ -244,6 +418,9 @@ final class OcrTextNormalizer {
                 return i;
             }
             boolean otherDigits = isDigitKey(other);
+            if (!candidateDigits && !otherDigits && isNoisyVariant(key, other)) {
+                return i;
+            }
             if (candidateDigits != otherDigits) {
                 continue;
             }
@@ -293,6 +470,57 @@ final class OcrTextNormalizer {
             i += Character.charCount(cp);
         }
         return count;
+    }
+
+    static boolean isNoisyVariant(@NonNull String a, @NonNull String b) {
+        if (a.equals(b)) {
+            return true;
+        }
+        int min = Math.min(a.length(), b.length());
+        int max = Math.max(a.length(), b.length());
+        if (min < 4 || max < 4) {
+            return false;
+        }
+        if (min * 100 < max * 70) {
+            return false;
+        }
+        int dist = editDistance(a, b);
+        return dist <= 1 || dist * 6 <= max;
+    }
+
+    static int editDistance(@NonNull String a, @NonNull String b) {
+        int n = a.length();
+        int m = b.length();
+        int[] prev = new int[m + 1];
+        int[] cur = new int[m + 1];
+        for (int j = 0; j <= m; j++) {
+            prev[j] = j;
+        }
+        for (int i = 1; i <= n; i++) {
+            cur[0] = i;
+            char ca = a.charAt(i - 1);
+            for (int j = 1; j <= m; j++) {
+                int cost = ca == b.charAt(j - 1) ? 0 : 1;
+                cur[j] = Math.min(Math.min(cur[j - 1] + 1, prev[j] + 1), prev[j - 1] + cost);
+            }
+            int[] swap = prev;
+            prev = cur;
+            cur = swap;
+        }
+        return prev[m];
+    }
+
+    static int lineScore(@Nullable String text, float confidence) {
+        if (text == null || text.isEmpty()) {
+            return 0;
+        }
+        int letters = countScript(text, Character::isLetter);
+        int digits = countScript(text, Character::isDigit);
+        int score = letters * 4 + digits * 3 + Math.round(confidence);
+        if (looksLikeMathNoise(text)) {
+            score -= 80;
+        }
+        return score;
     }
 
     private static boolean isDigitKey(@NonNull String key) {

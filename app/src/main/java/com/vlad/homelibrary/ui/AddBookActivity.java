@@ -610,7 +610,6 @@ public class AddBookActivity extends AppCompatActivity {
                 try {
                     newBook.setPublicationYear(Integer.parseInt(editPublicationYear.getText().toString().trim()));
                 } catch (NumberFormatException ignored) {
-                    // keep previously loaded year
                 }
             }
         } else {

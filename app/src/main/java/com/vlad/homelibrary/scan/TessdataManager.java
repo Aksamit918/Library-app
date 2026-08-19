@@ -23,17 +23,6 @@ public class TessdataManager {
             "https://github.com/tesseract-ocr/tessdata_fast/raw/main/"
     };
 
-    private static boolean isScriptPack(String code) {
-        return "Cyrillic".equals(code) || "Latin".equals(code);
-    }
-
-    private static String remoteFilePath(String code) {
-        if (isScriptPack(code)) {
-            return "script/" + code + ".traineddata";
-        }
-        return code + ".traineddata";
-    }
-
     private final OkHttpClient client = new OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(180, TimeUnit.SECONDS)
@@ -70,9 +59,8 @@ public class TessdataManager {
         for (String code : codes) {
             File file = new File(dir, code + ".traineddata");
             if (!file.exists() || file.length() < MIN_TRAINEDDATA_BYTES) {
-                if (file.exists()) {
-                    //noinspection ResultOfMethodCallIgnored
-                    file.delete();
+                if (file.exists() && !file.delete() && file.exists()) {
+                    throw new IOException("Cannot replace " + file.getName());
                 }
                 missing.add(code);
             }
@@ -93,15 +81,14 @@ public class TessdataManager {
         IOException lastError = null;
         for (String base : TESSDATA_URLS) {
             try {
-                downloadTo(base + remoteFilePath(code), target);
+                downloadTo(base + code + ".traineddata", target);
                 if (target.exists() && target.length() >= MIN_TRAINEDDATA_BYTES) {
                     return;
                 }
             } catch (IOException e) {
                 lastError = e;
-                if (target.exists()) {
-                    //noinspection ResultOfMethodCallIgnored
-                    target.delete();
+                if (target.exists() && !target.delete() && target.exists()) {
+                    throw new IOException("Cannot replace " + target.getName(), e);
                 }
             }
         }
@@ -143,9 +130,8 @@ public class TessdataManager {
                 throw new IOException("Cannot finalize " + target.getName());
             }
         } catch (IOException e) {
-            if (temp.exists()) {
-                //noinspection ResultOfMethodCallIgnored
-                temp.delete();
+            if (temp.exists() && !temp.delete()) {
+                temp.deleteOnExit();
             }
             throw e;
         }
